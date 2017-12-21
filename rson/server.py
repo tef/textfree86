@@ -3,11 +3,32 @@ import socket
 import traceback
 import sys
 
+from collections import OrderedDict
+
 from wsgiref.simple_server import make_server, WSGIRequestHandler
 
 from werkzeug.utils import redirect as Redirect
 from werkzeug.wrappers import Request, Response
 from werkzeug.exceptions import HTTPException, NotFound, BadRequest, NotImplemented, MethodNotAllowed
+
+from . import format
+
+class Router:
+    def __init__(self):
+        self.objects = OrderedDict()
+
+    def add(self, name=None):
+        def _add(obj):
+            n = obj.__name__ if name is None else name
+            self.objects[n] = obj
+        return _add
+
+    def handle(self, request):
+        out = {'a dictionary':'one key'}
+        return Response(format.dump(out))
+
+    def app(self):
+        return WSGIApp(self.handle)
 
 class WSGIApp:
     def __init__(self, handler):

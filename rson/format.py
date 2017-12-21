@@ -554,114 +554,8 @@ def dump_rson(obj, buf):
         nv = tag_value_for_object(obj)
         name, value = nv
         buf.write('@{} '.format(name))
+        # bug
         dump_rson(value, buf)
-
-
-""" 
-Decorated JSON: An RSON fallback
-
-true, false, null ~> true, false, null
-"..." / '...' ~> "...." removing escapes where possible & using codepoints
-[1,2,3,] ~> [1,2,3]
-{"a":'object'} ~> {'object':[['a', 'object']])
-@tagged "item" ~> {'tagged': "item"}
-@float "NaN" ~> {'float':'NaN'}
-@bytestring "..." ~> {'base64':'....'}
-"""
-
-
-def djson_parse(buf):
-    return json.loads(buf, object_pairs_hook=djson_object_pairs_hook)
-
-
-def djson_dump(obj):
-    obj = djson_wrap(obj)
-    return json.dumps(obj)
-
-
-def djson_parse_file(fh):
-    return json.load(fh, object_pairs_hook=djson_object_pairs_hook)
-
-
-def djson_dump_file(obj, fh):
-    obj = djson_wrap(obj)
-    return json.dump(obj, fh)
-
-
-def djson_object_pairs_hook(pairs):
-    ((k, v),) = pairs
-    if k == 'bool':
-        return v
-    if k == 'int':
-        return v
-    if k == 'float':
-        return float.fromhex(v)
-    if k == 'complex':
-        return complex(*v)
-    if k == 'string':
-        return v
-    if k == 'base64':
-        return base64.standard_b64decode(v)
-    if k == 'bytestring':
-        return v.encode('ascii')
-    if k == 'set':
-        return set(v)
-    if k == 'list':
-        return v
-    if k == 'dict':
-        return dict(v)
-    if k == 'record':
-        return OrderedDict(v)
-    if k == 'object':
-        return v
-    if k == 'datetime':
-        return parse_datetime(v)
-    if k == 'duration':
-        return timedelta(seconds=v)
-
-    return tag_rson_value(k, v)
-
-
-def djson_wrap(obj):
-    if obj is True or obj is False or obj is None:
-        return obj
-    elif isinstance(obj, (str, int)):
-        return obj
-    elif isinstance(obj, float):
-        h = obj.hex()
-        if h.startswith(('0', '-')):
-            return obj
-        else:
-            return {'float': h}
-    elif isinstance(obj, bytes):
-        return {'base64': base64.standard_b64encode(obj).decode('ascii')}
-    elif isinstance(obj, (list, tuple)):
-        return [djson_wrap(x) for x in obj]
-    elif isinstance(obj, set):
-        return {'set': [djson_wrap(x) for x in obj]}
-    elif isinstance(obj, OrderedDict):
-        return {'record': [(djson_wrap(x), djson_wrap(y)) for x, y in obj.items()]}
-    elif isinstance(obj, dict):
-        out = []
-        for x in sorted(obj.keys()):
-            out.append((djson_wrap(x), djson_wrap(obj[x])))
-        return {'dict': out}
-    elif isinstance(obj, datetime):
-        return {'datetime': format_datetime(obj)}
-    elif isinstance(obj, timedelta):
-        return {'duration': obj.total_seconds()}
-    elif isinstance(obj, complex):
-        return {'complex': [obj.real, obj.imag]}
-    else:
-        v = tag_value_for_object(obj)
-        if not v:
-            raise NotImplementedError(
-                "Don't know how to wrap {}, {}".format(obj.__class__, obj))
-        name, value = obj
-        return {name: djson_wrap(value)}
-
-
-# Tests
 
 
 def test_parse(buf, obj):
@@ -787,14 +681,6 @@ def main():
                 raise AssertionError(
                     'failed second trip {} != {}'.format(obj, out))
 
-    for x in tests:
-        out = parse(dump(x))
-        out2 = djson_parse(djson_dump(x))
-        if out != out:
-            if out2 == out2:
-                raise AssertionError('buf {} != {}'.format(x, out))
-        elif out != out2:
-            raise AssertionError('buf {} != {}'.format(x, out))
     print('tests passed')
 
 

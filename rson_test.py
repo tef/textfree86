@@ -4,15 +4,19 @@ from werkzeug.wrappers import Request, Response
 
 
 def test():
-    def app(request):
-        return Response('hello')
+    r = server.Router()
+    @r.add()
+    def echo(x):
+        return x
 
-    s = server.Server(server.WSGIApp(app), port=8888)
+    s = server.Server(r.app(), port=8888)
     s.start()
     print(s.url)
 
     try:
-        print(client.fetch('get',s.url, {}, {},None))
+        c = client.get(s.url)
+        print(c)
+        #print(c.echo(1))
     finally:
         s.stop()
 

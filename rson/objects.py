@@ -1,9 +1,7 @@
-
 from collections import OrderedDict
 
 class_for_tag = OrderedDict()
 tag_for_class = OrderedDict()  # classes -> tagger (get name, value)
-
 
 reserved_tags = set("""
         bool int float complex
