@@ -45,11 +45,16 @@ def test():
         x = client.post(test(x=1))
         print(x)
 
+        print(s.MyEndpoint())
         e = client.get(s.MyEndpoint())
 
         print(client.post(e.rpc_one(a=1,b=2)))
 
         print(client.post(e.rpc_two(a=3,b=4)))
+
+        counter = client.post(s.Counter(num=10))
+
+        print(counter)
     finally:
         server_thread.stop()
 

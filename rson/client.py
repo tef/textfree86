@@ -9,6 +9,8 @@ def resolve(obj, base_url):
 
 @resolve.register(objects.Link)
 @resolve.register(objects.Form)
+@resolve.register(objects.Service)
+@resolve.register(objects.Model)
 def resolve_link(obj, base_url):
     return obj.resolve(base_url)
 

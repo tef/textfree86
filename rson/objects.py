@@ -74,11 +74,25 @@ class Link:
 
 @registry.add()
 class Service:
-    def __init__(self, attrs):
-        self.attrs = attrs
+    def __init__(self, url, methods):
+        self.url = url
+        self.methods = methods
 
     def __getattr__(self, name):
-        return self.attrs[name]
+        self.methods[name]
+        def call(**args):
+            return Request(
+                    'POST',
+                    '{}/{}'.format(self.url, name),
+                    {}, 
+                    {},
+                    args)
+        return call
+
+    def resolve(self, base_url):
+        self.url = urljoin(base_url, self.url)
+
+
         
 @registry.add()
 class Form:
@@ -91,6 +105,26 @@ class Form:
     def resolve(self, base_url):
         self.url = urljoin(base_url, self.url)
 
+@registry.add()
+class Model:
+    def __init__(self, url):
+        self.url = url
+
+    def __call__(self, **args):
+        return Request('POST', self.url,  {},{}, args)
+
+    def resolve(self, base_url):
+        self.url = urljoin(base_url, self.url)
+
+@registry.add()
+class Resource:
+    def __init__(self, url, attrs):
+        self.url = url
+        self.attrs = attrs
+
+    def __getattr__(self, name):
+        return self.attrs[name]
+        
 
 @registry.add()
 class Request:

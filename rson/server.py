@@ -64,8 +64,8 @@ class ServiceRequestHandler:
         attrs = OrderedDict()
         for name, o in self.service.__dict__.items():
             if name[:2] != '__':
-                attrs[name] = objects.Form(self.url+'.'+name)
-        return objects.Service(attrs)
+                attrs[name] = []
+        return objects.Service(self.url,methods=attrs)
 
 class Field:
     pass
@@ -86,6 +86,11 @@ class ModelRequestHandler:
             return objects.Model(url=url)
 
     def POST(self, path, data):
+        path = path[len(self.url)+1:]
+        if path:
+            return self.model(path)
+        else:
+            return objects.Model(url=url)
         pass
 
     def link(self):
@@ -111,7 +116,7 @@ class Router:
             attrs = OrderedDict()
             for name,o in self.handlers.items():
                 attrs[name] = o.link()
-            self.service = objects.Service(attrs)
+            self.service = objects.Resource('/',attrs)
         return self.service
 
     def handle(self, request):
