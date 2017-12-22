@@ -1,4 +1,5 @@
 import threading
+import types
 import socket
 import traceback
 import sys
@@ -15,26 +16,45 @@ from . import format, objects
 
 # make_form/make_link
 
-def make_form(url, o):
-    return objects.Form(url)
+class RequestHandler:
+    def __init__(self, url, function):
+        self.fn = function
+        self.url = url
+
+    def GET(self, path):
+        return self.fn
+
+    def POST(self, path, data):
+        return self.fn(**data)
+
+    def link(self):
+        return objects.Form(self.url)
+
+
+
+def handler_for(name, obj):
+    return RequestHandler(name, obj)
 
 class Router:
     def __init__(self):
-        self.objects = OrderedDict()
+        self.handlers = OrderedDict()
+        self.paths = OrderedDict()
         self.service = None
 
     def add(self, name=None):
         def _add(obj):
             n = obj.__name__ if name is None else name
-            self.objects[n] = obj
+            self.handlers[n] = handler_for(n,obj)
+            self.paths[obj]=n
             self.service = None
+            return obj
         return _add
 
     def index(self):
         if self.service is None:
             attrs = OrderedDict()
-            for x,o in self.objects.items():
-                attrs[x] = make_form(x, o)
+            for name,o in self.handlers.items():
+                attrs[name] = o.link()
             self.service = objects.Service(attrs)
         return self.service
 
@@ -45,12 +65,16 @@ class Router:
         else:
             path = path[1:].split('/',1)
             name = path[0]
-            if name in self.objects:
+            if name in self.handlers:
                 args = format.parse(request.data.decode('utf-8'))
-                out = self.objects[name](**args)
+                out = self.handlers[name].POST(path, args)
         
+        def transform(o):
+            if isinstance(o, types.FunctionType) and o in self.paths:
+                return self.handlers[self.paths[o]].link()
+            return o
 
-        return Response(format.dump(out))
+        return Response(format.dump(out, transform))
 
     def app(self):
         return WSGIApp(self.handle)
@@ -80,12 +104,12 @@ class WSGIApp:
     def error_response(self, exception, trace):
         return Response(trace, status='500 not ok (%s)'%exception)
 
-class RequestHandler(WSGIRequestHandler):
+class QuietWSGIRequestHandler(WSGIRequestHandler):
     def log_request(self, code='-', size='-'):
         pass
 
 class Server(threading.Thread):
-    def __init__(self, app, host="", port=0, request_handler=RequestHandler):
+    def __init__(self, app, host="", port=0, request_handler=QuietWSGIRequestHandler):
         threading.Thread.__init__(self)
         self.daemon=True
         self.running = True

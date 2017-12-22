@@ -28,8 +28,10 @@ def test():
         r = client.post(s.test(x=1, y=1))
         print(r)
         
-        r = client.post(s.butt(x=1))
-        print(r)
+        x, butt = client.post(s.butt(x=1))
+        print(x)
+
+        r = client.post(butt(x=x))
     finally:
         server_thread.stop()
 
