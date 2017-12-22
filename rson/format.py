@@ -96,7 +96,7 @@ class ParserErr(Exception):
         Exception.__init__(self, "{} (at pos={})".format(reason, pos))
 
 
-def parse_rson(buf, pos):
+def parse_rson(buf, pos, transform=None):
     m = whitespace.match(buf, pos)
     if m:
         pos = m.end()
@@ -133,7 +133,7 @@ def parse_rson(buf, pos):
             pos = m.end()
 
         while buf[pos] != '}':
-            key, pos = parse_rson(buf, pos)
+            key, pos = parse_rson(buf, pos, transform)
 
             if key in out:
                 raise SemanticErr('duplicate key: {}, {}'.format(key, out))
@@ -152,7 +152,7 @@ def parse_rson(buf, pos):
                 raise ParserErr(
                     buf, pos, "Expected key:value pair but found {}".format(repr(peek)))
 
-            item, pos = parse_rson(buf, pos)
+            item, pos = parse_rson(buf, pos, transform)
 
             out[key] = item
 
@@ -167,6 +167,8 @@ def parse_rson(buf, pos):
                     buf, pos, "Expecting a ',', or a '}' but found {}".format(repr(peek)))
         if name not in (None, 'object', 'record', 'dict'):
             out = tag_rson_value(name,  out)
+        if transform is not None:
+            out = transform(out)
         return out, pos + 1
 
     elif peek == '[':
@@ -187,7 +189,7 @@ def parse_rson(buf, pos):
             pos = m.end()
 
         while buf[pos] != ']':
-            item, pos = parse_rson(buf, pos)
+            item, pos = parse_rson(buf, pos, transform)
             if name == 'set':
                 if item in out:
                     raise SemanticErr('duplicate item in set: {}'.format(item))
@@ -219,6 +221,8 @@ def parse_rson(buf, pos):
         else:
             out = tag_rson_value(name,  out)
 
+        if transform is not None:
+            out = transform(out)
         return out, pos
 
     elif peek == "'" or peek == '"':
@@ -339,6 +343,8 @@ def parse_rson(buf, pos):
             else:
                 out = tag_rson_value(name,  out)
 
+        if transform is not None:
+            out = transform(out)
         return out, end
 
     elif peek in "-+0123456789":
@@ -421,6 +427,8 @@ def parse_rson(buf, pos):
         else:
             out = tag_rson_value(name, out)
 
+        if transform is not None:
+            out = transform(out)
         return out, end
 
     else:
@@ -448,13 +456,15 @@ def parse_rson(buf, pos):
         else:
             out = tag_rson_value(name,  out)
 
+        if transform is not None:
+            out = transform(out)
         return out, end
 
     raise ParserErr(buf, pos)
 
 
-def parse(buf):
-    obj, pos = parse_rson(buf, 0)
+def parse(buf, transform=None):
+    obj, pos = parse_rson(buf, 0, transform)
 
     m = whitespace.match(buf, pos)
     if m:
@@ -468,13 +478,15 @@ def parse(buf):
     return obj
 
 
-def dump(obj):
+def dump(obj, transform=None):
     buf = io.StringIO('')
-    dump_rson(obj, buf)
+    dump_rson(obj, buf, transform)
     return buf.getvalue()
 
 
-def dump_rson(obj, buf):
+def dump_rson(obj, buf, transform=None):
+    if transform:
+        obj = transform(obj)
     if obj is True or obj is False or obj is None:
         buf.write(builtin_values[obj])
     elif isinstance(obj, str):
@@ -510,7 +522,7 @@ def dump_rson(obj, buf):
                 first = False
             else:
                 buf.write(", ")
-            dump_rson(x, buf)
+            dump_rson(x, buf, transform)
         buf.write(']')
     elif isinstance(obj, set):
         buf.write('@set [')
@@ -520,7 +532,7 @@ def dump_rson(obj, buf):
                 first = False
             else:
                 buf.write(", ")
-            dump_rson(x, buf)
+            dump_rson(x, buf, transform)
         buf.write(']')
     elif isinstance(obj, OrderedDict):
         buf.write('{')
@@ -530,9 +542,9 @@ def dump_rson(obj, buf):
                 first = False
             else:
                 buf.write(", ")
-            dump_rson(k, buf)
+            dump_rson(k, buf, transform)
             buf.write(": ")
-            dump_rson(v, buf)
+            dump_rson(v, buf, transform)
         buf.write('}')
     elif isinstance(obj, dict):
         buf.write('@dict {')
@@ -542,9 +554,9 @@ def dump_rson(obj, buf):
                 first = False
             else:
                 buf.write(", ")
-            dump_rson(k, buf)
+            dump_rson(k, buf, transform)
             buf.write(": ")
-            dump_rson(obj[k], buf)
+            dump_rson(obj[k], buf, transform)
         buf.write('}')
     elif isinstance(obj, datetime):
         buf.write('@datetime "{}"'.format(format_datetime(obj)))
@@ -556,7 +568,7 @@ def dump_rson(obj, buf):
         if not isinstance(value, OrderedDict) and isinstance(value, dict):
             value = OrderedDict(value)
         buf.write('@{} '.format(name))
-        dump_rson(value, buf)
+        dump_rson(value, buf, transform)
 
 
 def test_parse(buf, obj):

@@ -15,18 +15,28 @@ from . import format, objects
 
 # make_form/make_link
 
+def make_form(url, o):
+    return objects.Form(url)
+
 class Router:
     def __init__(self):
         self.objects = OrderedDict()
+        self.service = None
 
     def add(self, name=None):
         def _add(obj):
             n = obj.__name__ if name is None else name
             self.objects[n] = obj
+            self.service = None
         return _add
 
     def index(self):
-        return objects.Service({'echo': objects.Form('echo')})
+        if self.service is None:
+            attrs = OrderedDict()
+            for x,o in self.objects.items():
+                attrs[x] = make_form(x, o)
+            self.service = objects.Service(attrs)
+        return self.service
 
     def handle(self, request):
         path = request.path[:]

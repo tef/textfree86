@@ -7,17 +7,10 @@ from . import format, objects
 def resolve(obj, base_url):
     return obj
 
-@resolve.register(tuple)
-@resolve.register(list)
-def resolve_list(obj, base_url):
-    return obj.__class__(resolve(x) for x in obj)
-
-
 @resolve.register(objects.Link)
 @resolve.register(objects.Form)
-@resolve.register(objects.Service)
 def resolve_link(obj, base_url):
-    return obj.resolve(base_url, resolve)
+    return obj.resolve(base_url)
 
 
 def get(url):
@@ -40,6 +33,10 @@ def fetch(method, url, params, headers, data):
         data = format.dump(data)
     result = requests.request(method, url, params=params, headers=headers,data=data)
 
-    obj = format.parse(result.text)
+    def transform(obj):
+        resolve(obj, result.url)
+        return obj
+    obj = format.parse(result.text, transform)
 
-    return resolve(obj, result.url)
+    return obj
+

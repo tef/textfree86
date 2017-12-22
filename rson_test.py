@@ -1,24 +1,31 @@
 from rson import client, server
 
-from werkzeug.wrappers import Request, Response
-
-
 def test():
     r = server.Router()
     @r.add()
     def echo(x):
         return x
 
-    s = server.Server(r.app(), port=8888)
-    s.start()
-    print(s.url)
+    @r.add()
+    def test(x,y):
+        return x+y
+
+    server_thread = server.Server(r.app(), port=8888)
+    server_thread.start()
+
+    print("Running on ",server_thread.url)
 
     try:
-        c = client.get(s.url)
-        r = client.post(c.echo(x=1))
+        s= client.get(server_thread.url)
+
+        r = client.post(s.echo(x=1))
         print(r)
+
+        r = client.post(s.test(x=1, y=1))
+        print(r)
+        
     finally:
-        s.stop()
+        server_thread.stop()
 
 
 
