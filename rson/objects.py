@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from urllib.parse import urljoin
 
 reserved_tags = set("""
         bool int float complex
@@ -67,6 +68,10 @@ class Link:
     def __call__(self):
         return Request('GET', url,  {},{}, None)
 
+    def resolve(self, base_url, resolver):
+        return Link(urljoin(base_url, self.url))
+
+
 @registry.add()
 class Service:
     def __init__(self, attrs):
@@ -76,6 +81,12 @@ class Service:
         if name in self.attrs:
             return self.attrs[name]
 
+    def resolve(self, base_url, resolver):
+        attrs = {}
+        for k,v in self.attrs.items():
+            attrs[k] = resolver(v, base_url)
+        return Service(attrs)
+
 @registry.add()
 class Form:
     def __init__(self, url):
@@ -83,6 +94,9 @@ class Form:
 
     def __call__(self, **args):
         return Request('POST', self.url,  {},{}, args)
+
+    def resolve(self, base_url, resovler):
+        return Form(urljoin(base_url, self.url))
 
 @registry.add()
 class Request:

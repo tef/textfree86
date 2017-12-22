@@ -13,6 +13,8 @@ from werkzeug.exceptions import HTTPException, NotFound, BadRequest, NotImplemen
 
 from . import format, objects
 
+# make_form/make_link
+
 class Router:
     def __init__(self):
         self.objects = OrderedDict()
@@ -23,8 +25,21 @@ class Router:
             self.objects[n] = obj
         return _add
 
+    def index(self):
+        return objects.Service({'echo': objects.Form('echo')})
+
     def handle(self, request):
-        out = objects.Service({'echo': objects.Form('echo')})
+        path = request.path[:]
+        if path == '' or path == '/':
+            out = self.index()
+        else:
+            path = path[1:].split('/',1)
+            name = path[0]
+            if name in self.objects:
+                args = format.parse(request.data.decode('utf-8'))
+                out = self.objects[name](**args)
+        
+
         return Response(format.dump(out))
 
     def app(self):

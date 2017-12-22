@@ -1,6 +1,24 @@
+from functools import singledispatch
 import requests
 
 from . import format, objects
+
+@singledispatch
+def resolve(obj, base_url):
+    return obj
+
+@resolve.register(tuple)
+@resolve.register(list)
+def resolve_list(obj, base_url):
+    return obj.__class__(resolve(x) for x in obj)
+
+
+@resolve.register(objects.Link)
+@resolve.register(objects.Form)
+@resolve.register(objects.Service)
+def resolve_link(obj, base_url):
+    return obj.resolve(base_url, resolve)
+
 
 def get(url):
     if isinstance(url, objects.Request):
@@ -22,4 +40,6 @@ def fetch(method, url, params, headers, data):
         data = format.dump(data)
     result = requests.request(method, url, params=params, headers=headers,data=data)
 
-    return format.parse(result.text)
+    obj = format.parse(result.text)
+
+    return resolve(obj, result.url)
