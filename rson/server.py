@@ -71,7 +71,8 @@ class Field:
     pass
 
 class Model:
-    pass
+    def __init__(self, **args):
+        self.__dict__.update(args)
 
 class ModelRequestHandler:
     def __init__(self, url, model):
@@ -81,20 +82,34 @@ class ModelRequestHandler:
     def GET(self, path):
         path = path[len(self.url)+1:]
         if path:
-            return self.model(path)
+            return self.model.make(path)
         else:
-            return objects.Model(url=url)
+            return objects.Model(url=self.url)
 
     def POST(self, path, data):
         path = path[len(self.url)+1:]
         if path:
-            return self.model(path)
+            path, method = path.split('/',1)
+            obj = self.model.make(path)
+            return getattr(obj,method)(**data)
         else:
-            return objects.Model(url=url)
-        pass
+            print('nice')
+            return self.model.make(data)
 
     def link(self):
-        return objects.Form(self.url)
+        return objects.Model(url=self.url)
+
+    def embed(self,o):
+        attributes = OrderedDict()
+        methods = OrderedDict()
+        for k,v in o.__dict__.items():
+            if k.startswith('__'): next
+            attributes[k]= v
+        for k,v in self.model.__dict__.items():
+            if k.startswith('__'): next
+            if k in ('make', 'key'): next
+            methods[k]= []
+        return objects.Record("{}/{}".format(self.url,o.key()), attributes, methods)
 
 class Router:
     def __init__(self):
@@ -145,6 +160,10 @@ class Router:
             if isinstance(o, Service):
                 return self.handlers[self.paths[o.__class__]].embed()
             if isinstance(o, type) and issubclass(o, Service) and o in self.paths:
+                return self.handlers[self.paths[o]].link()
+            if isinstance(o, Model):
+                return self.handlers[self.paths[o.__class__]].embed(o)
+            if isinstance(o, type) and issubclass(o, Model) and o in self.paths:
                 return self.handlers[self.paths[o]].link()
 
             return o

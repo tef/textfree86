@@ -20,13 +20,19 @@ def test():
 
     @r.add()
     class Counter(server.Model):
-        num = server.Field()
+        def key(self):
+            return str(self.num)
+
+        def make(k):
+            c=Counter()
+            c.num = int(k)
+            return c
 
         def next(self):
-            return Counter(num)
+            return Counter.make(self.num+1)
 
         def value(self):
-            return num
+            return self.num
 
     server_thread = server.Server(r.app(), port=8888)
     server_thread.start()
@@ -52,9 +58,14 @@ def test():
 
         print(client.post(e.rpc_two(a=3,b=4)))
 
-        counter = client.post(s.Counter(num=10))
+        counter = client.post(s.Counter(10))
+        counter = client.post(counter.next())
+        counter = client.post(counter.next())
+        counter = client.post(counter.next())
+        value = client.post(counter.value())
 
-        print(counter)
+
+        print(value)
     finally:
         server_thread.stop()
 

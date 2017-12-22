@@ -60,8 +60,11 @@ class TaggedObject:
     def __repr__(self):
         return "<{} {}>".format(self.name, self.value)
 
+class Hyperlink:
+    pass
+
 @registry.add()
-class Link:
+class Link(Hyperlink):
     def __init__(self, url):
         self.url = url
 
@@ -73,7 +76,28 @@ class Link:
 
 
 @registry.add()
-class Service:
+class Form(Hyperlink):
+    def __init__(self, url):
+        self.url = url
+
+    def __call__(self, **args):
+        return Request('POST', self.url,  {},{}, args)
+
+    def resolve(self, base_url):
+        self.url = urljoin(base_url, self.url)
+
+@registry.add()
+class Resource:
+    def __init__(self, url, attrs):
+        self.url = url
+        self.attrs = attrs
+
+    def __getattr__(self, name):
+        return self.attrs[name]
+        
+
+@registry.add()
+class Service(Hyperlink):
     def __init__(self, url, methods):
         self.url = url
         self.methods = methods
@@ -93,38 +117,47 @@ class Service:
         self.url = urljoin(base_url, self.url)
 
 
-        
 @registry.add()
-class Form:
+class Model(Hyperlink):
     def __init__(self, url):
         self.url = url
 
-    def __call__(self, **args):
+    def __call__(self, args):
         return Request('POST', self.url,  {},{}, args)
 
     def resolve(self, base_url):
         self.url = urljoin(base_url, self.url)
 
 @registry.add()
-class Model:
-    def __init__(self, url):
+class Record(Hyperlink):
+    def __init__(self, url, attributes, methods):
         self.url = url
-
-    def __call__(self, **args):
-        return Request('POST', self.url,  {},{}, args)
-
-    def resolve(self, base_url):
-        self.url = urljoin(base_url, self.url)
-
-@registry.add()
-class Resource:
-    def __init__(self, url, attrs):
-        self.url = url
-        self.attrs = attrs
+        self.attributes = attributes
+        self.methods = methods
 
     def __getattr__(self, name):
-        return self.attrs[name]
-        
+        if name in self.attributes:
+            return self.attributes[name]
+
+        self.methods[name]
+        def call(**args):
+            return Request(
+                    'POST',
+                    '{}/{}'.format(self.url, name),
+                    {}, 
+                    {},
+                    args)
+        return call
+
+    def resolve(self, base_url):
+        self.url = urljoin(base_url, self.url)
+        self.url = url
+
+    def __call__(self, **args):
+        return Request('POST', self.url,  {},{}, args)
+
+    def resolve(self, base_url):
+        self.url = urljoin(base_url, self.url)
 
 @registry.add()
 class Request:
