@@ -553,8 +553,9 @@ def dump_rson(obj, buf):
     else:
         nv = tag_value_for_object(obj)
         name, value = nv
+        if not isinstance(value, OrderedDict) and isinstance(value, dict):
+            value = OrderedDict(value)
         buf.write('@{} '.format(name))
-        # bug
         dump_rson(value, buf)
 
 
@@ -643,7 +644,6 @@ def main():
 
     test_dump(1, "1")
 
-    test_dump_err(TaggedObject('float', 123), InvalidTag)
     test_parse_err('"foo', ParserErr)
     test_parse_err('"\uD800\uDD01"', ParserErr)
     test_parse_err(r'"\uD800\uDD01"', ParserErr)

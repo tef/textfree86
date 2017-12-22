@@ -16,7 +16,7 @@ def test():
     try:
         c = client.get(s.url)
         print(c)
-        #print(c.echo(1))
+        print(c.echo(1))
     finally:
         s.stop()
 

@@ -11,7 +11,7 @@ from werkzeug.utils import redirect as Redirect
 from werkzeug.wrappers import Request, Response
 from werkzeug.exceptions import HTTPException, NotFound, BadRequest, NotImplemented, MethodNotAllowed
 
-from . import format
+from . import format, objects
 
 class Router:
     def __init__(self):
@@ -24,7 +24,7 @@ class Router:
         return _add
 
     def handle(self, request):
-        out = {'a dictionary':'one key'}
+        out = objects.Service({'echo': objects.Form('echo')})
         return Response(format.dump(out))
 
     def app(self):
