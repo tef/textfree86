@@ -19,6 +19,8 @@ def handler_for(name, obj):
         return RequestHandler(name, obj)
     if issubclass(obj, Service):
         return ServiceRequestHandler(name, obj)
+    if issubclass(obj, Model):
+        return ModelRequestHandler(name, obj)
     raise Exception('no handler')
     
 class RequestHandler:
@@ -45,11 +47,7 @@ class ServiceRequestHandler:
         self.url = url
 
     def GET(self, path):
-        attrs = OrderedDict()
-        for name, o in self.service.__dict__.items():
-            if name[:2] != '__':
-                attrs[name] = objects.Form(self.url+'/'+name)
-        return objects.Service(attrs)
+        return self.service()
 
     def POST(self, path, data):
         path = path[len(self.url)+1:]
@@ -62,6 +60,36 @@ class ServiceRequestHandler:
     def link(self):
         return objects.Link(self.url)
 
+    def embed(self):
+        attrs = OrderedDict()
+        for name, o in self.service.__dict__.items():
+            if name[:2] != '__':
+                attrs[name] = objects.Form(self.url+'.'+name)
+        return objects.Service(attrs)
+
+class Field:
+    pass
+
+class Model:
+    pass
+
+class ModelRequestHandler:
+    def __init__(self, url, model):
+        self.model = model
+        self.url = url
+
+    def GET(self, path):
+        path = path[len(self.url)+1:]
+        if path:
+            return self.model(path)
+        else:
+            return objects.Model(url=url)
+
+    def POST(self, path, data):
+        pass
+
+    def link(self):
+        return objects.Form(self.url)
 
 class Router:
     def __init__(self):
@@ -91,8 +119,7 @@ class Router:
         if path == '' or path == '/':
             out = self.index()
         else:
-            name = path[1:].split('/',1)
-            name = name[0]
+            name = path[1:].split('/',1)[0].split('.',1)[0]
             if name in self.handlers:
                 data  = request.data.decode('utf-8')
                 if data:
@@ -110,8 +137,11 @@ class Router:
         def transform(o):
             if isinstance(o, types.FunctionType) and o in self.paths:
                 return self.handlers[self.paths[o]].link()
+            if isinstance(o, Service):
+                return self.handlers[self.paths[o.__class__]].embed()
             if isinstance(o, type) and issubclass(o, Service) and o in self.paths:
                 return self.handlers[self.paths[o]].link()
+
             return o
 
         return Response(format.dump(out, transform))

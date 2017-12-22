@@ -18,6 +18,16 @@ def test():
         def rpc_two(a,b):
             return a*b
 
+    @r.add()
+    class Counter(server.Model):
+        num = server.Field()
+
+        def next(self):
+            return Counter(num)
+
+        def value(self):
+            return num
+
     server_thread = server.Server(r.app(), port=8888)
     server_thread.start()
 
@@ -36,7 +46,6 @@ def test():
         print(x)
 
         e = client.get(s.MyEndpoint())
-        print(e)
 
         print(client.post(e.rpc_one(a=1,b=2)))
 
