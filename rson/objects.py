@@ -150,13 +150,16 @@ class Record(Hyperlink):
             return self.attributes[name]
 
         self.methods[name]
-        def call(**args):
-            return Request(
-                    'POST',
-                    '{}/{}'.format(self.url, name),
-                    {}, 
-                    {},
-                    args)
+        def call(*args, **kwargs):
+            arguments = self.methods[name]
+            data = OrderedDict()
+            for key, value in zip(arguments, args):
+                data[key] = value
+                if key in kwargs:
+                    raise Exception('invalid')
+            data.update(kwargs)
+            return Request('POST', '{}/{}'.format(self.url, name),
+                    {}, {}, data)
         return call
 
     def resolve(self, base_url):
