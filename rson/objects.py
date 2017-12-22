@@ -28,7 +28,6 @@ class Registry:
         if obj.__class__ == TaggedObject:
             return obj.name, obj.value
         elif obj.__class__ in self.tag_for:
-            print(obj)
             name = self.tag_for[obj.__class__]
             return name, OrderedDict(obj.__dict__)
         else:
@@ -36,12 +35,10 @@ class Registry:
                 "Can't find tag for object {}: unknown class {}".format(obj, obj.__class__))
 
     def from_tag(self, name, value):
-        print(name, value)
         if name in reserved_tags:
             raise InvalidTag(
                 name, "Can't use tag {} with {}, {} is reserved".format(value, name, name))
 
-        print(name)
         if name in self.classes:
             return self.classes[name](**value)
         else:
@@ -67,11 +64,13 @@ class Link:
     def __init__(self, url):
         self.url = url
 
+    def __call__(self):
+        return Request('GET', url,  {},{}, None)
+
 @registry.add()
 class Service:
     def __init__(self, attrs):
         self.attrs = attrs
-
 
     def __getattr__(self, name):
         if name in self.attrs:
@@ -82,7 +81,27 @@ class Form:
     def __init__(self, url):
         self.url = url
 
-print(registry.classes)
+    def __call__(self, **args):
+        return Request('POST', self.url,  {},{}, args)
+
+@registry.add()
+class Request:
+    def __init__(self,method, url, headers, params, data):
+        self.method = method
+        self.url = url
+        self.headers = headers
+        self.params = params
+        self.data = data
+
+@registry.add()
+class Response:
+    def __init__(self, code, status, headers, data):
+        self.code = code
+        self.status = status
+        self.headers = headers
+        self.data = data
+
+
 def tag_value_for_object(obj):
     return registry.as_tagged(obj)
 

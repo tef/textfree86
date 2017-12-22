@@ -1,10 +1,20 @@
 import requests
 
-from . import format
+from . import format, objects
 
 def get(url):
-    return fetch('GET', url, {}, {}, None)
+    if isinstance(url, objects.Request):
+        if url.method != 'GET':
+            raise Exception('mismatch')
+        return fetch(url.method, url.url, url.params, url.headers, url.data)
+    else:
+        return fetch('GET', url, {}, {}, None)
 
+def post(url, data=None):
+    if isinstance(url, objects.Request):
+        return fetch(url.method, url.url, url.params, url.headers, url.data)
+    else:
+        return fetch('GET', url, {}, {}, None)
 
 def fetch(method, url, params, headers, data):
 

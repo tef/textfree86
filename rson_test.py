@@ -15,8 +15,8 @@ def test():
 
     try:
         c = client.get(s.url)
-        print(c)
-        print(c.echo(1))
+        r = client.post(c.echo(x=1))
+        print(r)
     finally:
         s.stop()
 

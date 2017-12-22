@@ -579,7 +579,6 @@ def test_parse_err(buf, exc):
         if isinstance(e, exc):
             return
         else:
-            print(e.__class__, exc)
             raise AssertionError(
                 '{} did not cause {}, but {}'.format(buf, exc, e)) from e
     else:
