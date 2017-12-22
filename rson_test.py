@@ -42,7 +42,7 @@ def test():
     try:
         s= client.get(server_thread.url)
 
-        r = client.post(s.echo(x=1))
+        r = client.post(s.echo(1))
         print(r)
 
         test = client.post(s.test())
@@ -54,9 +54,9 @@ def test():
         print(s.MyEndpoint())
         e = client.get(s.MyEndpoint())
 
-        print(client.post(e.rpc_one(a=1,b=2)))
+        print(client.post(e.rpc_one(1,2)))
 
-        print(client.post(e.rpc_two(a=3,b=4)))
+        print(client.post(e.rpc_two(3,b=4)))
 
         counter = client.post(s.Counter(10))
         counter = client.post(counter.next())

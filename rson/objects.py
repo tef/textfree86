@@ -77,11 +77,19 @@ class Link(Hyperlink):
 
 @registry.add()
 class Form(Hyperlink):
-    def __init__(self, url):
+    def __init__(self, url, arguments):
         self.url = url
+        self.arguments = arguments
 
-    def __call__(self, **args):
-        return Request('POST', self.url,  {},{}, args)
+    def __call__(self,*args,**kwargs):
+        data = OrderedDict()
+        for name, value in zip(self.arguments, args):
+            data[name] = value
+            if name in kwargs:
+                raise Exception('invalid')
+        data.update(kwargs)
+
+        return Request('POST', self.url,  {},{}, data)
 
     def resolve(self, base_url):
         self.url = urljoin(base_url, self.url)
@@ -103,14 +111,16 @@ class Service(Hyperlink):
         self.methods = methods
 
     def __getattr__(self, name):
-        self.methods[name]
-        def call(**args):
-            return Request(
-                    'POST',
-                    '{}/{}'.format(self.url, name),
-                    {}, 
-                    {},
-                    args)
+        def call(*args, **kwargs):
+            arguments = self.methods[name]
+            data = OrderedDict()
+            for key, value in zip(arguments, args):
+                data[key] = value
+                if key in kwargs:
+                    raise Exception('invalid')
+            data.update(kwargs)
+            return Request('POST', '{}/{}'.format(self.url, name),
+                    {}, {}, data)
         return call
 
     def resolve(self, base_url):

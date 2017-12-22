@@ -3,6 +3,7 @@ import types
 import socket
 import traceback
 import sys
+import inspect
 
 from collections import OrderedDict
 from urllib.parse import urljoin
@@ -13,6 +14,9 @@ from werkzeug.wrappers import Request, Response
 from werkzeug.exceptions import HTTPException, NotFound, BadRequest, NotImplemented, MethodNotAllowed
 
 from . import format, objects
+
+def funcargs(m):
+    return m.__code__.co_varnames[:m.__code__.co_argcount]
 
 def handler_for(name, obj):
     if isinstance(obj, types.FunctionType):
@@ -35,7 +39,7 @@ class RequestHandler:
         return self.fn(**data)
 
     def link(self):
-        return objects.Form(self.url)
+        return objects.Form(self.url, arguments=funcargs(self.fn))
 
 class Service:
     def __init__(self):
@@ -53,9 +57,7 @@ class ServiceRequestHandler:
         path = path[len(self.url)+1:]
         if path[:2] == '__': 
             return
-        if path in self.service.__dict__:
-            return self.service.__dict__[path](**data)
-        return self.fn(**data)
+        return self.service.__dict__[path](**data)
 
     def link(self):
         return objects.Link(self.url)
@@ -64,7 +66,7 @@ class ServiceRequestHandler:
         attrs = OrderedDict()
         for name, o in self.service.__dict__.items():
             if name[:2] != '__':
-                attrs[name] = []
+                attrs[name] = funcargs(o)
         return objects.Service(self.url,methods=attrs)
 
 class Field:
@@ -93,7 +95,6 @@ class ModelRequestHandler:
             obj = self.model.make(path)
             return getattr(obj,method)(**data)
         else:
-            print('nice')
             return self.model.make(data)
 
     def link(self):
