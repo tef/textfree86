@@ -10,6 +10,10 @@ def test():
     def test(x,y):
         return x+y
 
+    @r.add()
+    def butt(x):
+        return x+1, butt
+
     server_thread = server.Server(r.app(), port=8888)
     server_thread.start()
 
@@ -24,6 +28,8 @@ def test():
         r = client.post(s.test(x=1, y=1))
         print(r)
         
+        r = client.post(s.butt(x=1))
+        print(r)
     finally:
         server_thread.stop()
 
