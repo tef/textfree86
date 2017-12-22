@@ -66,7 +66,7 @@ class Link:
         self.url = url
 
     def __call__(self):
-        return Request('GET', url,  {},{}, None)
+        return Request('GET', self.url,  {},{}, None)
 
     def resolve(self, base_url):
         self.url = urljoin(base_url, self.url)
@@ -78,8 +78,7 @@ class Service:
         self.attrs = attrs
 
     def __getattr__(self, name):
-        if name in self.attrs:
-            return self.attrs[name]
+        return self.attrs[name]
         
 @registry.add()
 class Form:

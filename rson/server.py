@@ -5,7 +5,7 @@ import traceback
 import sys
 
 from collections import OrderedDict
-
+from urllib.parse import urljoin
 from wsgiref.simple_server import make_server, WSGIRequestHandler
 
 from werkzeug.utils import redirect as Redirect
@@ -14,8 +14,13 @@ from werkzeug.exceptions import HTTPException, NotFound, BadRequest, NotImplemen
 
 from . import format, objects
 
-# make_form/make_link
-
+def handler_for(name, obj):
+    if isinstance(obj, types.FunctionType):
+        return RequestHandler(name, obj)
+    if issubclass(obj, Service):
+        return ServiceRequestHandler(name, obj)
+    raise Exception('no handler')
+    
 class RequestHandler:
     def __init__(self, url, function):
         self.fn = function
@@ -30,10 +35,33 @@ class RequestHandler:
     def link(self):
         return objects.Form(self.url)
 
+class Service:
+    def __init__(self):
+        pass
 
+class ServiceRequestHandler:
+    def __init__(self, url, service):
+        self.service = service
+        self.url = url
 
-def handler_for(name, obj):
-    return RequestHandler(name, obj)
+    def GET(self, path):
+        attrs = OrderedDict()
+        for name, o in self.service.__dict__.items():
+            if name[:2] != '__':
+                attrs[name] = objects.Form(self.url+'/'+name)
+        return objects.Service(attrs)
+
+    def POST(self, path, data):
+        path = path[len(self.url)+1:]
+        if path[:2] == '__': 
+            return
+        if path in self.service.__dict__:
+            return self.service.__dict__[path](**data)
+        return self.fn(**data)
+
+    def link(self):
+        return objects.Link(self.url)
+
 
 class Router:
     def __init__(self):
@@ -44,7 +72,7 @@ class Router:
     def add(self, name=None):
         def _add(obj):
             n = obj.__name__ if name is None else name
-            self.handlers[n] = handler_for(n,obj)
+            self.handlers[n] = handler_for("/"+n,obj)
             self.paths[obj]=n
             self.service = None
             return obj
@@ -63,14 +91,26 @@ class Router:
         if path == '' or path == '/':
             out = self.index()
         else:
-            path = path[1:].split('/',1)
-            name = path[0]
+            name = path[1:].split('/',1)
+            name = name[0]
             if name in self.handlers:
-                args = format.parse(request.data.decode('utf-8'))
-                out = self.handlers[name].POST(path, args)
+                data  = request.data.decode('utf-8')
+                if data:
+                    args = format.parse(data)
+                else:
+                    args = None
+
+                if request.method == 'GET':
+                    out = self.handlers[name].GET(path)
+                else:
+                    out = self.handlers[name].POST(path, args)
+            else:
+                raise NotFound(path)
         
         def transform(o):
             if isinstance(o, types.FunctionType) and o in self.paths:
+                return self.handlers[self.paths[o]].link()
+            if isinstance(o, type) and issubclass(o, Service) and o in self.paths:
                 return self.handlers[self.paths[o]].link()
             return o
 
