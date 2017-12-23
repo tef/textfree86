@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 
 from .objects import InvalidTag, TaggedObject, tag_value_for_object, tag_rson_value, reserved_tags
 
+CONTENT_TYPE="application/rson"
+
 whitespace = re.compile(r"(?:\ |\t|\uFEFF|\r|\n|#[^\r\n]*(?:\r?\n|$))+")
 
 int_b2 = re.compile(r"0b[01][01_]*")

@@ -1,7 +1,7 @@
 from rson import client, server
 
 def test():
-    r = server.Router()
+    r = server.Router(prefix="/test/")
     @r.add()
     def echo(x):
         return x
@@ -20,16 +20,17 @@ def test():
 
     @r.add()
     class Counter(server.Model):
+        @property
         def key(self):
             return str(self.num)
 
-        def make(k):
-            c=Counter()
-            c.num = int(k)
-            return c
+        @key.setter
+        def key(self, key):
+            self.num = int(key)
 
         def next(self):
-            return Counter.make(self.num+1)
+            self.num+=1
+            return self
 
         def value(self):
             return self.num
@@ -40,7 +41,7 @@ def test():
     print("Running on ",server_thread.url)
 
     try:
-        s= client.get(server_thread.url)
+        s= client.get(server_thread.url+"/test/")
 
         r = client.post(s.echo(1))
         print(r)

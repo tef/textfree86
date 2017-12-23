@@ -1,7 +1,11 @@
 from functools import singledispatch
+from collections import OrderedDict
+
 import requests
 
 from . import format, objects
+
+HEADERS={'Content-Type': format.CONTENT_TYPE}
 
 @singledispatch
 def resolve(obj, base_url):
@@ -27,10 +31,12 @@ def post(url, data=None):
         return fetch('GET', url, {}, {}, None)
 
 def fetch(method, url, params, headers, data):
+    h = OrderedDict(HEADERS)
+    h.update(headers)
 
     if data is not None:
         data = format.dump(data)
-    result = requests.request(method, url, params=params, headers=headers,data=data)
+    result = requests.request(method, url, params=params, headers=h,data=data)
 
     def transform(obj):
         resolve(obj, result.url)

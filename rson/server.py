@@ -84,7 +84,9 @@ class ModelRequestHandler:
     def GET(self, path):
         path = path[len(self.url)+1:]
         if path:
-            return self.model.make(path)
+            obj = self.model()
+            obj.key = path
+            return obj
         else:
             return objects.Model(url=self.url)
 
@@ -92,10 +94,13 @@ class ModelRequestHandler:
         path = path[len(self.url)+1:]
         if path:
             path, method = path.split('/',1)
-            obj = self.model.make(path)
+            obj = self.model()
+            obj.key = path
             return getattr(obj,method)(**data)
         else:
-            return self.model.make(data)
+            obj = self.model()
+            obj.key = data
+            return obj
 
     def link(self):
         return objects.Model(url=self.url)
@@ -108,20 +113,22 @@ class ModelRequestHandler:
             attributes[k]= v
         for k,v in self.model.__dict__.items():
             if k.startswith('__'): next
-            if k in ('make', 'key'): next
+            if k == 'key': next
             methods[k]= []
-        return objects.Record("{}/{}".format(self.url,o.key()), attributes, methods)
+        return objects.Record("{}/{}".format(self.url,o.key), attributes, methods)
 
 class Router:
-    def __init__(self):
+    def __init__(self, prefix="/"):
         self.handlers = OrderedDict()
         self.paths = OrderedDict()
         self.service = None
+        if prefix[-1] != '/': prefix += "/"
+        self.prefix=prefix
 
     def add(self, name=None):
         def _add(obj):
             n = obj.__name__ if name is None else name
-            self.handlers[n] = handler_for("/"+n,obj)
+            self.handlers[n] = handler_for(self.prefix+n,obj)
             self.paths[obj]=n
             self.service = None
             return obj
@@ -132,15 +139,16 @@ class Router:
             attrs = OrderedDict()
             for name,o in self.handlers.items():
                 attrs[name] = o.link()
-            self.service = objects.Resource('/',attrs)
+            self.service = objects.Resource(self.prefix,attrs)
         return self.service
 
     def handle(self, request):
         path = request.path[:]
-        if path == '' or path == '/':
+        if path == self.prefix or path == self.prefix[:-1]:
             out = self.index()
-        else:
-            name = path[1:].split('/',1)[0].split('.',1)[0]
+        elif path:
+            p = len(self.prefix)
+            name = path[p:].split('/',1)[0].split('.',1)[0]
             if name in self.handlers:
                 data  = request.data.decode('utf-8')
                 if data:
@@ -169,7 +177,7 @@ class Router:
 
             return o
 
-        return Response(format.dump(out, transform))
+        return Response(format.dump(out, transform), content_type=format.CONTENT_TYPE)
 
     def app(self):
         return WSGIApp(self.handle)
