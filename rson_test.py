@@ -42,6 +42,8 @@ def test():
 
     try:
         s= client.get(server_thread.url+"/test/")
+        print(s)
+        print(s.echo)
 
         r = client.post(s.echo(1))
         print(r)
