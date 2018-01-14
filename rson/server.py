@@ -20,14 +20,10 @@ def funcargs(m):
 
 def handler_for(name, obj):
     if isinstance(obj, types.FunctionType):
-        return RequestHandler(name, obj)
-    if issubclass(obj, Service):
-        return ServiceRequestHandler(name, obj)
-    if issubclass(obj, Model):
-        return ModelRequestHandler(name, obj)
-    raise Exception('no handler')
+        obj.Handler = FunctionHandler
+    return obj.Handler(name, obj)
     
-class RequestHandler:
+class FunctionHandler:
     def __init__(self, url, function):
         self.fn = function
         self.url = url
@@ -45,77 +41,77 @@ class Service:
     def __init__(self):
         pass
 
-class ServiceRequestHandler:
-    def __init__(self, url, service):
-        self.service = service
-        self.url = url
+    class Handler:
+        def __init__(self, url, service):
+            self.service = service
+            self.url = url
 
-    def GET(self, path):
-        return self.service()
+        def GET(self, path):
+            return self.service()
 
-    def POST(self, path, data):
-        path = path[len(self.url)+1:]
-        if path[:2] == '__': 
-            return
-        return self.service.__dict__[path](**data)
+        def POST(self, path, data):
+            path = path[len(self.url)+1:]
+            if path[:2] == '__': 
+                return
+            return self.service.__dict__[path](**data)
 
-    def link(self):
-        return objects.Link(self.url)
+        def link(self):
+            return objects.Link(self.url)
 
-    def embed(self):
-        attrs = OrderedDict()
-        for name, o in self.service.__dict__.items():
-            if name[:2] != '__':
-                attrs[name] = funcargs(o)
-        return objects.Service(self.url,methods=attrs)
-
-class Field:
-    pass
+        def embed(self):
+            attrs = OrderedDict()
+            for name, o in self.service.__dict__.items():
+                if name[:2] != '__':
+                    attrs[name] = funcargs(o)
+            return objects.Service(self.url,methods=attrs)
 
 class Model:
     def __init__(self, **args):
         self.__dict__.update(args)
 
-class ModelRequestHandler:
-    def __init__(self, url, model):
-        self.model = model
-        self.url = url
+    class Field:
+        pass
 
-    def GET(self, path):
-        path = path[len(self.url)+1:]
-        if path:
-            obj = self.model()
-            obj.key = path
-            return obj
-        else:
+    class Handler:
+        def __init__(self, url, model):
+            self.model = model
+            self.url = url
+
+        def GET(self, path):
+            path = path[len(self.url)+1:]
+            if path:
+                obj = self.model()
+                obj.key = path
+                return obj
+            else:
+                return objects.Model(url=self.url)
+
+        def POST(self, path, data):
+            path = path[len(self.url)+1:]
+            if path:
+                path, method = path.split('/',1)
+                obj = self.model()
+                obj.key = path
+                return getattr(obj,method)(**data)
+            else:
+                obj = self.model()
+                obj.key = data
+                return obj
+
+        def link(self):
             return objects.Model(url=self.url)
 
-    def POST(self, path, data):
-        path = path[len(self.url)+1:]
-        if path:
-            path, method = path.split('/',1)
-            obj = self.model()
-            obj.key = path
-            return getattr(obj,method)(**data)
-        else:
-            obj = self.model()
-            obj.key = data
-            return obj
-
-    def link(self):
-        return objects.Model(url=self.url)
-
-    def embed(self,o):
-        attributes = OrderedDict()
-        methods = OrderedDict()
-        for k,v in o.__dict__.items():
-            if k.startswith('__'): next
-            attributes[k]= v
-        for k,v in self.model.__dict__.items():
-            if k.startswith('__'): next
-            if k == 'key': next
-            methods[k]= []
-        return objects.Record("{}/{}".format(self.url,o.key), attributes, methods)
+        def embed(self,o):
+            attributes = OrderedDict()
+            methods = OrderedDict()
+            for k,v in o.__dict__.items():
+                if k.startswith('__'): next
+                attributes[k]= v
+            for k,v in self.model.__dict__.items():
+                if k.startswith('__'): next
+                if k == 'key': next
+                methods[k]= []
+            return objects.Record("{}/{}".format(self.url,o.key), attributes, methods)
 
 class Router:
     def __init__(self, prefix="/"):
