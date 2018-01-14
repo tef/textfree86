@@ -21,9 +21,17 @@ def funcargs(m):
 def handler_for(name, obj):
     if isinstance(obj, types.FunctionType):
         obj.Handler = FunctionHandler
-    return obj.Handler(name, obj)
+    if hasattr(obj, 'Handler'):
+        return obj.Handler(name, obj)
+
+    if issubclass(obj, RequestHandler):
+        return obj(name)
+    raise Exception('No Handler')
+
+class RequestHandler:
+    pass
     
-class FunctionHandler:
+class FunctionHandler(RequestHandler):
     def __init__(self, url, function):
         self.fn = function
         self.url = url
@@ -34,14 +42,14 @@ class FunctionHandler:
     def POST(self, path, data):
         return self.fn(**data)
 
-    def link(self):
+    def embed(self, o=None):
         return objects.Form(self.url, arguments=funcargs(self.fn))
 
 class Service:
     def __init__(self):
         pass
 
-    class Handler:
+    class Handler(RequestHandler):
         def __init__(self, url, service):
             self.service = service
             self.url = url
@@ -58,7 +66,9 @@ class Service:
         def link(self):
             return objects.Link(self.url)
 
-        def embed(self):
+        def embed(self,o=None):
+            if o is None or o is self.service:
+                return self.link()
             attrs = OrderedDict()
             for name, o in self.service.__dict__.items():
                 if name[:2] != '__':
@@ -72,7 +82,7 @@ class Model:
     class Field:
         pass
 
-    class Handler:
+    class Handler(RequestHandler):
         def __init__(self, url, model):
             self.model = model
             self.url = url
@@ -101,7 +111,9 @@ class Model:
         def link(self):
             return objects.Model(url=self.url)
 
-        def embed(self,o):
+        def embed(self,o=None):
+            if o is None or o is self.model:
+                return self.link()
             attributes = OrderedDict()
             methods = OrderedDict()
             for k,v in o.__dict__.items():
@@ -134,7 +146,7 @@ class Router:
         if self.service is None:
             attrs = OrderedDict()
             for name,o in self.handlers.items():
-                attrs[name] = o.link()
+                attrs[name] = o.embed()
             self.service = objects.Resource(self.prefix,attrs)
         return self.service
 
@@ -160,16 +172,11 @@ class Router:
                 raise NotFound(path)
         
         def transform(o):
-            if isinstance(o, types.FunctionType) and o in self.paths:
-                return self.handlers[self.paths[o]].link()
-            if isinstance(o, Service):
-                return self.handlers[self.paths[o.__class__]].embed()
-            if isinstance(o, type) and issubclass(o, Service) and o in self.paths:
-                return self.handlers[self.paths[o]].link()
-            if isinstance(o, Model):
+            if isinstance(o, type) or isinstance(o, types.FunctionType):
+                if o in self.paths:
+                    return self.handlers[self.paths[o]].embed(o)
+            elif o.__class__ in self.paths:
                 return self.handlers[self.paths[o.__class__]].embed(o)
-            if isinstance(o, type) and issubclass(o, Model) and o in self.paths:
-                return self.handlers[self.paths[o]].link()
 
             return o
 
