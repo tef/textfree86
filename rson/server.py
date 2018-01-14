@@ -42,6 +42,9 @@ class FunctionHandler(RequestHandler):
     def POST(self, path, data):
         return self.fn(**data)
 
+    def link(self):
+        return objects.Form(self.url, arguments=funcargs(self.fn))
+
     def embed(self, o=None):
         return objects.Form(self.url, arguments=funcargs(self.fn))
 
@@ -146,7 +149,7 @@ class Router:
         if self.service is None:
             attrs = OrderedDict()
             for name,o in self.handlers.items():
-                attrs[name] = o.embed()
+                attrs[name] = o.link()
             self.service = objects.Resource(self.prefix,attrs)
         return self.service
 
