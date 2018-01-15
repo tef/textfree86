@@ -18,17 +18,6 @@ from . import format, objects
 def funcargs(m):
     return m.__code__.co_varnames[:m.__code__.co_argcount]
 
-def handler_for(name, obj):
-    if isinstance(obj, types.FunctionType):
-        obj.Handler = FunctionHandler
-
-    if hasattr(obj, 'Handler'):
-        return obj.Handler(name, obj)
-
-    if issubclass(obj, RequestHandler):
-        return obj(name)
-
-    raise Exception('No Handler')
 
 class RequestHandler:
     pass
@@ -179,12 +168,18 @@ class Router:
 
     def add(self, name=None):
         def _add(obj):
-            n = obj.__name__ if name is None else name
-            self.handlers[n] = handler_for(self.prefix+n,obj)
-            self.paths[obj]=n
-            self.service = None
+            if isinstance(obj, types.FunctionType):
+                obj.Handler = FunctionHandler
+            self.add_handler(name, obj.Handler, obj)
             return obj
+
         return _add
+
+    def add_handler(self, name, handler, obj):
+        n = obj.__name__ if name is None else name
+        self.handlers[n] = handler(self.prefix+n, obj)
+        self.paths[obj]=n
+        self.service = None
 
     def index(self):
         if self.service is None:
