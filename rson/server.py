@@ -76,7 +76,7 @@ class Service:
             for name, o in self.service.__dict__.items():
                 if name[:2] != '__':
                     attrs[name] = funcargs(o)
-            return objects.Service(self.url,methods=attrs)
+            return objects.Resource(self.url,{},methods=attrs)
 
 class Model:
     def __init__(self, **args):
@@ -97,7 +97,7 @@ class Model:
                 obj.key = path
                 return obj
             else:
-                return objects.Model(url=self.url)
+                return objects.Form(url=self.url, arguments=['key'])
 
         def POST(self, path, data):
             path = path[len(self.url)+1:]
@@ -108,11 +108,11 @@ class Model:
                 return getattr(obj,method)(**data)
             else:
                 obj = self.model()
-                obj.key = data
+                obj.key = data['key']
                 return obj
 
         def link(self):
-            return objects.Model(url=self.url)
+            return objects.Form(url=self.url, arguments=['key'])
 
         def embed(self,o=None):
             if o is None or o is self.model:
@@ -126,7 +126,7 @@ class Model:
                 if k.startswith('__'): next
                 if k == 'key': next
                 methods[k]= []
-            return objects.Record("{}/{}".format(self.url,o.key), attributes, methods)
+            return objects.Resource("{}/{}".format(self.url,o.key), attributes, methods)
 
 class Router:
     def __init__(self, prefix="/"):
@@ -150,7 +150,7 @@ class Router:
             attrs = OrderedDict()
             for name,o in self.handlers.items():
                 attrs[name] = o.link()
-            self.service = objects.Resource(self.prefix,attrs)
+            self.service = objects.Resource(self.prefix,attrs,{})
         return self.service
 
     def handle(self, request):

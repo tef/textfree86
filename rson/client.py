@@ -14,94 +14,51 @@ def resolve(obj, base_url):
 
 @resolve.register(objects.Link)
 def resolve_link(obj, base_url):
-    def fn():
-        url = urljoin(base_url, obj.url)
-        return objects.Request('GET', url,  {},{}, None)
-    return fn
+    url = urljoin(base_url, obj.url)
+    return RemoteFunction('GET', url, [])
 
 @resolve.register(objects.Form)
 def resolve_form(obj, base_url):
-    def fn(*args,**kwargs):
-        url = urljoin(base_url, obj.url)
-        data = OrderedDict()
-        for name, value in zip(obj.arguments, args):
-            data[name] = value
-            if name in kwargs:
-                raise Exception('invalid')
-        data.update(kwargs)
-        return objects.Request('POST', url,  {},{}, data)
-
-    return fn
+    url = urljoin(base_url, obj.url)
+    return RemoteFunction('POST', url, obj.arguments)
 
 @resolve.register(objects.Resource)
 def resolve_resource(obj, base_url):
-    return RemoteResource(obj, base_url)
+    url = urljoin(base_url, obj.url)
+    return RemoteObject(url, obj.attributes, obj.methods)
 
-class RemoteResource:
-    def __init__(self, obj, base_url):
-        self.url = urljoin(base_url, obj.url)
-        self.obj = obj
 
-    def __getattr__(self, name):
-        return self.obj.attrs[name]
-        
-@resolve.register(objects.Service)
-def resolve_service(obj, base_url):
-    return RemoteService(obj, base_url)
+class RemoteFunction:
+    def __init__(self, method, url, arguments):
+        self.method = method
+        self.url = url
+        self.arguments = arguments
 
-class RemoteService:
-    def __init__(self, obj, base_url):
-        self.url = urljoin(base_url, obj.url)
-        self.obj = obj
+    def __call__(self, *args, **kwargs):
+        if self.method == 'GET':
+            return objects.Request('GET', self.url, {}, {}, None)
 
-    def __getattr__(self, name):
-        def call(*args, **kwargs):
-            arguments = self.obj.methods[name]
-            data = OrderedDict()
-            for key, value in zip(arguments, args):
-                data[key] = value
-                if key in kwargs:
-                    raise Exception('invalid')
-            data.update(kwargs)
-            return objects.Request('POST', '{}/{}'.format(self.url, name),
-                    {}, {}, data)
-        return call
+        data = OrderedDict()
+        for key, value in zip(self.arguments, args):
+            data[key] = value
+            if key in kwargs:
+                raise Exception('invalid')
+        data.update(kwargs)
+        return objects.Request('POST', self.url, {}, {}, data)
 
-@resolve.register(objects.Record)
-def resolve_model(obj, base_url):
-    return RemoteRecord(obj, base_url)
-
-class RemoteRecord:
-    def __init__(self, obj, base_url):
-        self.url = urljoin(base_url, obj.url)
-        self.obj = obj
+class RemoteObject:
+    def __init__(self, url, attributes, methods):
+        self.url = url
+        self.attributes = attributes
+        self.methods = methods
 
     def __getattr__(self, name):
-        if name in self.obj.attributes:
-            return self.obj.attributes[name]
-        def call(*args, **kwargs):
-            arguments = self.obj.methods[name]
-            data = OrderedDict()
-            for key, value in zip(arguments, args):
-                data[key] = value
-                if key in kwargs:
-                    raise Exception('invalid')
-            data.update(kwargs)
-            return objects.Request('POST', '{}/{}'.format(self.url, name),
-                    {}, {}, data)
-        return call
+        if name in self.attributes:
+            return self.attributes[name]
+        arguments = self.methods[name]
+        url = '{}/{}'.format(self.url, name)
+        return RemoteFunction('POST', url, arguments)
 
-@resolve.register(objects.Model)
-def resolve_model(obj, base_url):
-    def fn(*args,**kwargs):
-        url = urljoin(base_url, obj.url)
-        if args:
-            data = args[0]
-        else:
-            data =kwargs
-        return objects.Request('POST', url,  {},{}, data)
-
-    return fn
 
 def get(url):
     if isinstance(url, objects.Request):

@@ -75,24 +75,7 @@ class Form(Hyperlink):
         self.arguments = arguments
 
 @registry.add()
-class Resource:
-    def __init__(self, url, attrs):
-        self.url = url
-        self.attrs = attrs
-
-@registry.add()
-class Service(Hyperlink):
-    def __init__(self, url, methods):
-        self.url = url
-        self.methods = methods
-
-@registry.add()
-class Model(Hyperlink):
-    def __init__(self, url):
-        self.url = url
-
-@registry.add()
-class Record(Hyperlink):
+class Resource(Hyperlink):
     def __init__(self, url, attributes, methods):
         self.url = url
         self.attributes = attributes
