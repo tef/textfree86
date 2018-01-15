@@ -8,25 +8,68 @@ from . import format, objects
 
 HEADERS={'Content-Type': format.CONTENT_TYPE}
 
-@singledispatch
-def resolve(obj, base_url):
-    return obj
+class Client:
+    def __init__(self):
+        self.session=requests.session()
 
-@resolve.register(objects.Link)
-def resolve_link(obj, base_url):
-    url = urljoin(base_url, obj.url)
-    return RemoteFunction('GET', url, [])
+    def get(self, request):
+        if not isinstance(request, objects.Request):
+            request = objects.Request('GET', request, {}, {}, None)
 
-@resolve.register(objects.Form)
-def resolve_form(obj, base_url):
-    url = urljoin(base_url, obj.url)
-    return RemoteFunction('POST', url, obj.arguments)
+        if request.method != 'GET':
+            raise Exception('mismatch')
+        return self.fetch(request)
 
-@resolve.register(objects.Resource)
-def resolve_resource(obj, base_url):
-    url = urljoin(base_url, obj.url)
-    return RemoteObject(url, obj.attributes, obj.methods)
 
+    def post(self, request, data=None):
+        if not isinstance(request, objects.Request):
+            request = objects.Request('POST', request, {}, {}, data)
+
+        if request.method != 'POST':
+            raise Exception('mismatch')
+        
+        return self.fetch(request)
+
+    def fetch(self, request):
+        headers = OrderedDict(HEADERS)
+        if request.headers:
+            headers.update(request.headers)
+        
+        method = request.method
+        url = request.url
+        params = request.params
+        
+        if request.data is not None:
+            data = format.dump(request.data)
+        else:
+            data = None
+
+        result = self.session.request(
+                method, 
+                url, 
+                params=params, 
+                headers=headers, 
+                data=data
+        )
+
+        def transform(obj):
+            if not isinstance(obj, objects.Hyperlink):
+                return obj
+
+            url = urljoin(result.url, obj.url)
+
+            if isinstance(obj, objects.Link):
+                return RemoteFunction('GET', url, [])
+            if isinstance(obj, objects.Form):
+                return RemoteFunction('POST', url, obj.arguments)
+            if isinstance(obj, objects.Resource):
+                return RemoteObject(url, obj.attributes, obj.methods)
+
+            return obj
+
+        obj = format.parse(result.text, transform)
+
+        return obj
 
 class RemoteFunction:
     def __init__(self, method, url, arguments):
@@ -59,33 +102,11 @@ class RemoteObject:
         url = '{}/{}'.format(self.url, name)
         return RemoteFunction('POST', url, arguments)
 
+client = Client()
 
-def get(url):
-    if isinstance(url, objects.Request):
-        if url.method != 'GET':
-            raise Exception('mismatch')
-        return fetch(url.method, url.url, url.params, url.headers, url.data)
-    else:
-        return fetch('GET', url, {}, {}, None)
+def get(arg):
+    return client.get(arg)
 
-def post(url, data=None):
-    if isinstance(url, objects.Request):
-        return fetch(url.method, url.url, url.params, url.headers, url.data)
-    else:
-        return fetch('GET', url, {}, {}, None)
-
-def fetch(method, url, params, headers, data):
-    h = OrderedDict(HEADERS)
-    h.update(headers)
-
-    if data is not None:
-        data = format.dump(data)
-    result = requests.request(method, url, params=params, headers=h,data=data)
-
-    def transform(obj):
-        obj = resolve(obj, result.url)
-        return obj
-    obj = format.parse(result.text, transform)
-
-    return obj
+def post(arg, data=None):
+    return client.post(arg, data)
 
