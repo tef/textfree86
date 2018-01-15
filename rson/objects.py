@@ -76,7 +76,8 @@ class Form(Hyperlink):
 
 @registry.add()
 class Resource(Hyperlink):
-    def __init__(self, url, attributes, methods):
+    def __init__(self, kind, url, attributes, methods):
+        self.kind = kind
         self.url = url
         self.attributes = attributes
         self.methods = methods

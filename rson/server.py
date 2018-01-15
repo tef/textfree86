@@ -6,7 +6,7 @@ import sys
 import inspect
 
 from collections import OrderedDict
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlencode
 from wsgiref.simple_server import make_server, WSGIRequestHandler
 
 from werkzeug.utils import redirect as Redirect
@@ -21,11 +21,13 @@ def funcargs(m):
 def handler_for(name, obj):
     if isinstance(obj, types.FunctionType):
         obj.Handler = FunctionHandler
+
     if hasattr(obj, 'Handler'):
         return obj.Handler(name, obj)
 
     if issubclass(obj, RequestHandler):
         return obj(name)
+
     raise Exception('No Handler')
 
 class RequestHandler:
@@ -36,10 +38,10 @@ class FunctionHandler(RequestHandler):
         self.fn = function
         self.url = url
 
-    def GET(self, path):
+    def GET(self, path, params):
         return self.fn
 
-    def POST(self, path, data):
+    def POST(self, path, params, data):
         return self.fn(**data)
 
     def link(self):
@@ -57,10 +59,10 @@ class Service:
             self.service = service
             self.url = url
 
-        def GET(self, path):
+        def GET(self, path, params):
             return self.service()
 
-        def POST(self, path, data):
+        def POST(self, path, paramsm, data):
             path = path[len(self.url)+1:]
             if path[:2] == '__': 
                 return
@@ -76,7 +78,46 @@ class Service:
             for name, o in self.service.__dict__.items():
                 if name[:2] != '__':
                     attrs[name] = funcargs(o)
-            return objects.Resource(self.url,{},methods=attrs)
+            return objects.Resource(
+                    self.service.__name__,
+                    self.url,{},methods=attrs)
+
+class View:
+    class Handler(RequestHandler):
+        def __init__(self, url, view):
+            self.view = view
+            self.url = url
+
+        def GET(self, path, params):
+            params = {key: format.parse(value) for key,value in params.items()}
+            return self.view(**params)
+
+        def POST(self, path, params, data):
+            if params:
+                obj = self.GET(path, params)
+
+                path = path[len(self.url)+1:]
+                if path[:2] == '__': 
+                    return
+                return getattr(obj, path)(**data)
+            return self.view(**data)
+
+        def link(self):
+            args = funcargs(self.view.__init__)[1:]
+            return objects.Form(self.url, arguments=args)
+
+        def embed(self,o=None):
+            if o is None or o is self.view:
+                return self.link()
+            attrs = OrderedDict()
+            for name, method in self.view.__dict__.items():
+                if name[:2] != '__':
+                    attrs[name] = funcargs(method)[1:]
+            params = {key: format.dump(value) for key, value in o.__dict__.items()}
+            url = "{}?{}".format(self.url, urlencode(params))
+            return objects.Resource(
+                    self.view.__name__,
+                    url, o.__dict__,methods=attrs)
 
 class Model:
     def __init__(self, **args):
@@ -126,7 +167,7 @@ class Model:
                 if k.startswith('__'): next
                 if k == 'key': next
                 methods[k]= []
-            return objects.Resource("{}/{}".format(self.url,o.key), attributes, methods)
+            return objects.Resource(self.model.__name__,"{}/{}".format(self.url,o.key), attributes, methods)
 
 class Router:
     def __init__(self, prefix="/"):
@@ -150,7 +191,7 @@ class Router:
             attrs = OrderedDict()
             for name,o in self.handlers.items():
                 attrs[name] = o.link()
-            self.service = objects.Resource(self.prefix,attrs,{})
+            self.service = objects.Resource('Index',self.prefix,attrs,{})
         return self.service
 
     def handle(self, request):
@@ -167,10 +208,12 @@ class Router:
                 else:
                     args = None
 
+                params = request.args
+
                 if request.method == 'GET':
-                    out = self.handlers[name].GET(path)
+                    out = self.handlers[name].GET(path, params)
                 else:
-                    out = self.handlers[name].POST(path, args)
+                    out = self.handlers[name].POST(path, params, args)
             else:
                 raise NotFound(path)
         

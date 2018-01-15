@@ -63,7 +63,7 @@ class Client:
             if isinstance(obj, objects.Form):
                 return RemoteFunction('POST', url, obj.arguments)
             if isinstance(obj, objects.Resource):
-                return RemoteObject(url, obj.attributes, obj.methods)
+                return RemoteObject(obj.kind, url, obj.attributes, obj.methods)
 
             return obj
 
@@ -76,6 +76,9 @@ class RemoteFunction:
         self.method = method
         self.url = url
         self.arguments = arguments
+
+    def __str__(self):
+        return "<Link to {}>".format(self.url)
 
     def __call__(self, *args, **kwargs):
         if self.method == 'GET':
@@ -90,16 +93,24 @@ class RemoteFunction:
         return objects.Request('POST', self.url, {}, {}, data)
 
 class RemoteObject:
-    def __init__(self, url, attributes, methods):
+    def __init__(self,kind, url, attributes, methods):
+        self.kind = kind
         self.url = url
         self.attributes = attributes
         self.methods = methods
+
+    def __str__(self):
+        return "<{} at {}>".format(self.kind, self.url)
 
     def __getattr__(self, name):
         if name in self.attributes:
             return self.attributes[name]
         arguments = self.methods[name]
-        url = '{}/{}'.format(self.url, name)
+        if '?' in self.url:
+            url, params = self.url.split('?',1)
+            url = '{}/{}?{}'.format(url, name, params)
+        else:
+            url = '{}/{}'.format(self.url, name)
         return RemoteFunction('POST', url, arguments)
 
 client = Client()

@@ -19,18 +19,12 @@ def test():
             return a*b
 
     @r.add()
-    class Counter(server.Model):
-        @property
-        def key(self):
-            return str(self.num)
-
-        @key.setter
-        def key(self, key):
-            self.num = int(key)
+    class Counter(server.View):
+        def __init__(self, num=0):
+            self.num = num
 
         def next(self):
-            self.num+=1
-            return self
+            return Counter(self.num+1)
 
         def value(self):
             return self.num
@@ -65,10 +59,12 @@ def test():
         counter = client.post(counter.next())
         counter = client.post(counter.next())
         counter = client.post(counter.next())
+        print(counter)
+        print('nice')
         value = client.post(counter.value())
 
 
-        print(value)
+        print(value, counter.num)
     finally:
         server_thread.stop()
 
