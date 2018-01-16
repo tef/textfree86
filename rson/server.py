@@ -125,6 +125,7 @@ class Model:
         @f.setter
         def f(self,value):
             self.id = value
+        f.rpc = False
         return f
 
 
@@ -144,8 +145,7 @@ class Model:
             path = path[len(self.url)+1:]
             if path:
                 path, method = path.split('/',1)
-                obj = self.invoke(obj, method, data)
-                return getattr(obj,method)(**data)
+                return self.invoke(obj, method, data)
             else:
                 return self.create(**data)
 
@@ -158,13 +158,14 @@ class Model:
         def embed(self,o=None):
             if o is None or o is self.model:
                 return self.link()
+
             attributes = OrderedDict()
             methods = OrderedDict()
             for k,v in o.__dict__.items():
                 if k.startswith('__'): next
                 attributes[k]= v
             for k,v in self.model.__dict__.items():
-                if getattr(v, 'rpc', False) and not k.startswith('__'):
+                if getattr(v, 'rpc', False) and not k.startswith('__') :
                     methods[k]= []
             return objects.Resource(self.model.__name__,
                     "{}/{}".format(self.url,o.id), 
