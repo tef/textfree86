@@ -247,8 +247,11 @@ class Router:
 
             return o
 
-        return Response(format.dump(out, transform), content_type=format.CONTENT_TYPE)
+        if out is None:
+            return Response('', status='204 None')
 
+        result = format.dump(out, transform)
+        return Response(result, content_type=format.CONTENT_TYPE) 
     def app(self):
         return WSGIApp(self.handle)
 

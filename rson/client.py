@@ -52,6 +52,9 @@ class Client:
                 data=data
         )
 
+        if result.status_code == 204:
+            return None
+
         def transform(obj):
             if not isinstance(obj, objects.Hyperlink):
                 return obj

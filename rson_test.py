@@ -18,6 +18,9 @@ def test():
         def rpc_two(a,b):
             return a*b
 
+        def rpc_three():
+            return None
+
     @r.add()
     class Counter(server.View):
         def __init__(self, num=0):
@@ -85,6 +88,8 @@ def test():
         print(client.post(e.rpc_one(1,2)))
 
         print(client.post(e.rpc_two(3,b=4)))
+        
+        print(client.post(e.rpc_three()))
 
         counter = client.post(s.Counter(10))
         counter = client.post(counter.next())
