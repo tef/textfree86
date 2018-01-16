@@ -53,11 +53,11 @@ def test():
             self.state = 'run'
 
         @server.rpc()
-        def stop(self, name):
+        def stop(self):
             self.state = 'stop'
 
         @server.rpc()
-        def start(self, name):
+        def start(self):
             self.state = 'run'
 
         def hidden(self):
@@ -73,28 +73,28 @@ def test():
         print(s)
         print(s.echo)
 
-        r = client.post(s.echo(1))
+        r = client.call(s.echo(1))
         print(r)
 
-        test = client.post(s.test())
+        test = client.call(s.test())
         print(test)
         
-        x = client.post(test(x=1))
+        x = client.call(test(x=1))
         print(x)
 
         print(s.MyEndpoint())
         e = client.get(s.MyEndpoint())
 
-        print(client.post(e.rpc_one(1,2)))
+        print(client.call(e.rpc_one(1,2)))
 
-        print(client.post(e.rpc_two(3,b=4)))
+        print(client.call(e.rpc_two(3,b=4)))
         
-        print(client.post(e.rpc_three()))
+        print(client.call(e.rpc_three()))
 
-        counter = client.post(s.Counter(10))
-        counter = client.post(counter.next())
-        counter = client.post(counter.next())
-        counter = client.post(counter.next())
+        counter = client.call(s.Counter(10))
+        counter = client.call(counter.next())
+        counter = client.call(counter.next())
+        counter = client.call(counter.next())
         print(counter)
         print('nice')
         value = client.post(counter.value())
@@ -102,7 +102,7 @@ def test():
 
         print(value, counter.num)
 
-        job = client.post(s.Job(name="butt"))
+        job = client.call(s.Job(name="butt"))
 
         print(job, job.url, job.methods)
     finally:

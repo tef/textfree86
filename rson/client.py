@@ -14,21 +14,48 @@ class Client:
 
     def get(self, request):
         if not isinstance(request, objects.Request):
+            if hasattr(request, 'url'):
+                request = request.url
             request = objects.Request('GET', request, {}, {}, None)
 
         if request.method != 'GET':
             raise Exception('mismatch')
         return self.fetch(request)
 
-
     def post(self, request, data=None):
         if not isinstance(request, objects.Request):
+            if hasattr(request, 'url'):
+                request = request.url
             request = objects.Request('POST', request, {}, {}, data)
 
         if request.method != 'POST':
+            print(request.method)
             raise Exception('mismatch')
         
         return self.fetch(request)
+
+    def call(self, request, data=None):
+        if not isinstance(request, objects.Request):
+            if hasattr(request, 'url'):
+                request = request.url
+            request = objects.Request('POST', request, {}, {}, data)
+
+        return self.fetch(request)
+
+    def create(self, request, data=None):
+        raise Exception('no')
+
+    def update(self, request, data):
+        raise Exception('no')
+    
+    def delete(self, request):
+        raise Exception('no')
+    
+    def list(self, request, next=None):
+        pass
+
+    def watch(self, request):
+        pass
 
     def fetch(self, request):
         headers = OrderedDict(HEADERS)
@@ -132,16 +159,18 @@ class RemoteObject:
     def __getattr__(self, name):
         if name in self.attributes:
             return self.attributes[name]
-        if name in self.links:
-            return RemoteFunction('GET', self.links[name], ())
         
-        arguments = self.methods[name]
         if '?' in self.url:
             url, params = self.url.split('?',1)
             url = '{}/{}?{}'.format(url, name, params)
         else:
             url = '{}/{}'.format(self.url, name)
-        return RemoteFunction('POST', url, arguments)
+
+        if name in self.links:
+            return RemoteFunction('GET', url, ())
+        else:
+            arguments = self.methods[name]
+            return RemoteFunction('POST', url, arguments)
 
 client = Client()
 
@@ -150,4 +179,7 @@ def get(arg):
 
 def post(arg, data=None):
     return client.post(arg, data)
+
+def call(arg, data=None):
+    return client.call(arg, data)
 

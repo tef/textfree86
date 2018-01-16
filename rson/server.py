@@ -18,10 +18,45 @@ from . import format, objects
 def funcargs(m):
     return m.__code__.co_varnames[:m.__code__.co_argcount]
 
+def make_resource(obj, url, all_methods=False):
+    cls = obj.__class__
+    attributes = OrderedDict()
+    methods = OrderedDict()
+    links = []
 
-def rpc():
+    for k,v in obj.__dict__.items():
+        if k.startswith('__'): continue
+        
+        attributes[k]= v
+
+    if isinstance(obj, Service):
+        start = 0
+    else:
+        start = 1
+
+    for k,v in obj.__class__.__dict__.items():
+        if not getattr(v, 'rpc', all_methods): continue
+        if k.startswith('__'): continue
+        if v == model_key: continue
+
+        if getattr(v, 'safe', False):
+            links.append(k)
+        else:
+            methods[k] = funcargs(v)[start:]
+
+    return objects.Resource(
+        kind = cls.__name__,
+        url = url,
+        attributes = attributes,
+        links = links,
+        methods = methods,
+    )
+
+
+def rpc(safe=False):
     def _fn(fn):
         fn.rpc = True
+        fn.safe = safe
         return fn
     return _fn
 
@@ -69,13 +104,7 @@ class Service:
         def embed(self,o=None):
             if o is None or o is self.service:
                 return self.link()
-            attrs = OrderedDict()
-            for name, o in self.service.__dict__.items():
-                if name[:2] != '__':
-                    attrs[name] = funcargs(o)
-            return objects.Resource(
-                    self.service.__name__,
-                    self.url,{},methods=attrs)
+            return make_resource(o, self.url, all_methods=True)
 
 class View:
     class Handler(RequestHandler):
@@ -104,30 +133,22 @@ class View:
         def embed(self,o=None):
             if o is None or o is self.view:
                 return self.link()
-
-            attrs = OrderedDict()
-            for name, method in self.view.__dict__.items():
-                if name[:2] != '__' and getattr(method, 'rpc', True):
-                    attrs[name] = funcargs(method)[1:]
             params = {key: format.dump(value) for key, value in o.__dict__.items()}
             url = "{}?{}".format(self.url, urlencode(params))
 
-            return objects.Resource(
-                    self.view.__name__,
-                    url, o.__dict__,methods=attrs)
+            return make_resource(o, url, all_methods=True)
+
+@property
+def model_key(self):
+    return self.id
+@model_key.setter
+def model_key(self,value):
+    self.id = value
 
 class Model:
     @staticmethod
     def key():
-        @property
-        def f(self):
-            return self.id
-        @f.setter
-        def f(self,value):
-            self.id = value
-        f.rpc = False
-        return f
-
+        return model_key 
 
     class Handler(RequestHandler):
         def __init__(self, url, model):
@@ -159,25 +180,15 @@ class Model:
             if o is None or o is self.model:
                 return self.link()
 
-            attributes = OrderedDict()
-            methods = OrderedDict()
-            for k,v in o.__dict__.items():
-                if k.startswith('__'): next
-                attributes[k]= v
-            for k,v in self.model.__dict__.items():
-                if getattr(v, 'rpc', False) and not k.startswith('__') :
-                    methods[k]= []
-            return objects.Resource(self.model.__name__,
-                    "{}/{}".format(self.url,o.id), 
-                    attributes, methods=methods)
+            url = self.url_for(o)
+            return make_resource(o, url, all_methods=False)
+
+        def url_for(self, o):
+            return "{}/{}".format(self.url,o.id)
 
         def lookup(self, key):
             obj = self.model()
             obj.id = path
-            pass
-
-        def url(self, obj):
-            pass
 
         def list(self, selector, next=None):
             pass
