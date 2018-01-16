@@ -57,6 +57,9 @@ def test():
         def start(self, name):
             self.state = 'run'
 
+        def hidden(self):
+            pass
+
     server_thread = server.Server(r.app(), port=8888)
     server_thread.start()
 
@@ -96,7 +99,7 @@ def test():
 
         job = client.post(s.Job(name="butt"))
 
-        print(job, job.url)
+        print(job, job.url, job.methods)
     finally:
         server_thread.stop()
 

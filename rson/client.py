@@ -67,7 +67,7 @@ class Client:
             if isinstance(obj, objects.Selector):
                 return RemoteSelector(obj.kind, url, obj.arguments)
             if isinstance(obj, objects.Resource):
-                return RemoteObject(obj.kind, url, obj.attributes, obj.methods)
+                return RemoteObject(obj.kind, url, obj)
 
             return obj
 
@@ -115,11 +115,13 @@ class RemoteSelector:
         return objects.Request('POST', self.url, {}, {}, data)
 
 class RemoteObject:
-    def __init__(self,kind, url, attributes, methods):
+    def __init__(self,kind, url, obj):
         self.kind = kind
         self.url = url
-        self.attributes = attributes
-        self.methods = methods
+        self.obj = obj
+        self.links = obj.links
+        self.attributes = obj.attributes
+        self.methods = obj.methods
 
     def __str__(self):
         return "<{} at {}>".format(self.kind, self.url)
@@ -127,6 +129,9 @@ class RemoteObject:
     def __getattr__(self, name):
         if name in self.attributes:
             return self.attributes[name]
+        if name in self.links:
+            return RemoteFunction('GET', self.links[name], ())
+        
         arguments = self.methods[name]
         if '?' in self.url:
             url, params = self.url.split('?',1)

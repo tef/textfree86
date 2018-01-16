@@ -104,12 +104,14 @@ class View:
         def embed(self,o=None):
             if o is None or o is self.view:
                 return self.link()
+
             attrs = OrderedDict()
             for name, method in self.view.__dict__.items():
-                if name[:2] != '__':
+                if name[:2] != '__' and getattr(method, 'rpc', True):
                     attrs[name] = funcargs(method)[1:]
             params = {key: format.dump(value) for key, value in o.__dict__.items()}
             url = "{}?{}".format(self.url, urlencode(params))
+
             return objects.Resource(
                     self.view.__name__,
                     url, o.__dict__,methods=attrs)
@@ -162,9 +164,11 @@ class Model:
                 if k.startswith('__'): next
                 attributes[k]= v
             for k,v in self.model.__dict__.items():
-                if k.startswith('__'): next
-                methods[k]= []
-            return objects.Resource(self.model.__name__,"{}/{}".format(self.url,o.id), attributes, methods)
+                if getattr(v, 'rpc', False) and not k.startswith('__'):
+                    methods[k]= []
+            return objects.Resource(self.model.__name__,
+                    "{}/{}".format(self.url,o.id), 
+                    attributes, methods=methods)
 
         def lookup(self, key):
             obj = self.model()
@@ -208,7 +212,7 @@ class Router:
             attrs = OrderedDict()
             for name,o in self.handlers.items():
                 attrs[name] = o.link()
-            self.service = objects.Resource('Index',self.prefix,attrs,{})
+            self.service = objects.Resource('Index',self.prefix,attrs)
         return self.service
 
     def handle(self, request):
