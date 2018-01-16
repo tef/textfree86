@@ -19,6 +19,12 @@ def funcargs(m):
     return m.__code__.co_varnames[:m.__code__.co_argcount]
 
 
+def rpc():
+    def _fn(fn):
+        fn.rpc = True
+        return fn
+    return _fn
+
 class RequestHandler:
     pass
     
@@ -109,40 +115,43 @@ class View:
                     url, o.__dict__,methods=attrs)
 
 class Model:
-    def __init__(self, **args):
-        self.__dict__.update(args)
+    @staticmethod
+    def key():
+        @property
+        def f(self):
+            return self.id
+        @f.setter
+        def f(self,value):
+            self.id = value
+        return f
 
-    class Field:
-        pass
 
     class Handler(RequestHandler):
         def __init__(self, url, model):
             self.model = model
             self.url = url
 
-        def GET(self, path):
+        def GET(self, path, params):
             path = path[len(self.url)+1:]
             if path:
-                obj = self.model()
-                obj.key = path
-                return obj
+                return self.lookup(path)
             else:
-                return objects.Form(url=self.url, arguments=['key'])
+                return self.link()
 
-        def POST(self, path, data):
+        def POST(self, path, params, data):
             path = path[len(self.url)+1:]
             if path:
                 path, method = path.split('/',1)
-                obj = self.model()
-                obj.key = path
+                obj = self.invoke(obj, method, data)
                 return getattr(obj,method)(**data)
             else:
-                obj = self.model()
-                obj.key = data['key']
-                return obj
+                return self.create(**data)
 
         def link(self):
-            return objects.Form(url=self.url, arguments=['key'])
+            return objects.Selector(
+                    kind=self.model.__name__,
+                    url=self.url, 
+                    arguments=funcargs(self.create)[1:])
 
         def embed(self,o=None):
             if o is None or o is self.model:
@@ -154,9 +163,22 @@ class Model:
                 attributes[k]= v
             for k,v in self.model.__dict__.items():
                 if k.startswith('__'): next
-                if k == 'key': next
                 methods[k]= []
-            return objects.Resource(self.model.__name__,"{}/{}".format(self.url,o.key), attributes, methods)
+            return objects.Resource(self.model.__name__,"{}/{}".format(self.url,o.id), attributes, methods)
+
+        def lookup(self, key):
+            obj = self.model()
+            obj.id = path
+            pass
+
+        def url(self, obj):
+            pass
+
+        def list(self, selector, next=None):
+            pass
+
+        def watch(self, selector):
+            pass
 
 class Router:
     def __init__(self, prefix="/"):

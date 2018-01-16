@@ -59,9 +59,13 @@ class Client:
             url = urljoin(result.url, obj.url)
 
             if isinstance(obj, objects.Link):
+                if obj.value:
+                    return lambda: obj.value
                 return RemoteFunction('GET', url, [])
             if isinstance(obj, objects.Form):
                 return RemoteFunction('POST', url, obj.arguments)
+            if isinstance(obj, objects.Selector):
+                return RemoteSelector(obj.kind, url, obj.arguments)
             if isinstance(obj, objects.Resource):
                 return RemoteObject(obj.kind, url, obj.attributes, obj.methods)
 
@@ -84,6 +88,24 @@ class RemoteFunction:
         if self.method == 'GET':
             return objects.Request('GET', self.url, {}, {}, None)
 
+        data = OrderedDict()
+        for key, value in zip(self.arguments, args):
+            data[key] = value
+            if key in kwargs:
+                raise Exception('invalid')
+        data.update(kwargs)
+        return objects.Request('POST', self.url, {}, {}, data)
+
+class RemoteSelector:
+    def __init__(self, kind,  url, arguments):
+        self.kind = kind
+        self.url = url
+        self.arguments = arguments
+
+    def __str__(self):
+        return "<Link to {}>".format(self.url)
+
+    def __call__(self, *args, **kwargs):
         data = OrderedDict()
         for key, value in zip(self.arguments, args):
             data[key] = value

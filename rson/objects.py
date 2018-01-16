@@ -65,14 +65,23 @@ class Hyperlink:
 
 @registry.add()
 class Link(Hyperlink):
-    def __init__(self, url):
+    def __init__(self, url, value=None):
         self.url = url
+        self.value = value
 
 @registry.add()
 class Form(Hyperlink):
     def __init__(self, url, arguments):
         self.url = url
         self.arguments = arguments
+
+@registry.add()
+class Selector(Hyperlink):
+    def __init__(self, kind, url, arguments, selectors=()):
+        self.kind = kind
+        self.url = url
+        self.arguments = arguments
+        self.selectors = [] # {key,operator, value}
 
 @registry.add()
 class Resource(Hyperlink):

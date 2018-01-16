@@ -29,6 +29,34 @@ def test():
         def value(self):
             return self.num
 
+    @r.add()
+    class Job():
+        class Handler(server.Model.Handler):
+            jobs = {}
+            def lookup(self, name):
+                return self.jobs[name]
+
+            def create(self, name):
+                j = self.jobs[name] = Job(name)
+                return j
+
+            def delete(self, name):
+                self.jobs.pop(name)
+
+        name = server.Model.key()
+
+        def __init__(self, name):
+            self.name = name
+            self.state = 'run'
+
+        @server.rpc()
+        def stop(self, name):
+            self.state = 'stop'
+
+        @server.rpc()
+        def start(self, name):
+            self.state = 'run'
+
     server_thread = server.Server(r.app(), port=8888)
     server_thread.start()
 
@@ -65,6 +93,10 @@ def test():
 
 
         print(value, counter.num)
+
+        job = client.post(s.Job(name="butt"))
+
+        print(job, job.url)
     finally:
         server_thread.stop()
 
