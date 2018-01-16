@@ -1,6 +1,6 @@
 from rson import client, server
 
-def test():
+def make_server():
     r = server.Router(prefix="/test/")
     @r.add()
     def echo(x):
@@ -22,7 +22,7 @@ def test():
             return None
 
     @r.add()
-    class Counter(server.View):
+    class Counter(server.Token):
         def __init__(self, num=0):
             self.num = num
 
@@ -63,7 +63,10 @@ def test():
         def hidden(self):
             pass
 
-    server_thread = server.Server(r.app(), port=8888)
+    return server.Server(r.app(), port=8888)
+
+def test():
+    server_thread = make_server()
     server_thread.start()
 
     print("Running on ",server_thread.url)

@@ -149,9 +149,9 @@ class RemoteObject:
         self.kind = kind
         self.url = url
         self.obj = obj
-        self.links = obj.links
+        self.links = obj.metadata.get('links')
         self.attributes = obj.attributes
-        self.methods = obj.methods
+        self.methods = obj.metadata.get('methods')
 
     def __str__(self):
         return "<{} at {}>".format(self.kind, self.url)
@@ -166,11 +166,12 @@ class RemoteObject:
         else:
             url = '{}/{}'.format(self.url, name)
 
-        if name in self.links:
+        if self.links and name in self.links:
             return RemoteFunction('GET', url, ())
-        else:
+        elif self.methods:
             arguments = self.methods[name]
             return RemoteFunction('POST', url, arguments)
+        raise AttributeError('no')
 
 client = Client()
 

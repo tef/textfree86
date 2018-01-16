@@ -85,13 +85,14 @@ class Selector(Hyperlink):
 
 @registry.add()
 class Resource(Hyperlink):
-    def __init__(self, kind, url, attributes, metadata=(), links=(), methods=()):
+    def __init__(self, kind, metadata, attributes):
         self.kind = kind
-        self.url = url
         self.attributes = attributes
-        self.metadata = metadata
-        self.links = links
-        self.methods = methods
+        self.metadata = OrderedDict(metadata)
+    @property
+    def url(self):
+        return self.metadata['url']
+
 
 @registry.add()
 class Request:

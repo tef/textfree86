@@ -30,6 +30,8 @@ def make_resource(obj, url, all_methods=False):
         attributes[k]= v
 
     if isinstance(obj, Service):
+        # xxx: fixme?
+        # in service __new__
         start = 0
     else:
         start = 1
@@ -46,10 +48,12 @@ def make_resource(obj, url, all_methods=False):
 
     return objects.Resource(
         kind = cls.__name__,
-        url = url,
+        metadata = OrderedDict(
+            url = url,
+            links = links,
+            methods = methods,
+        ),
         attributes = attributes,
-        links = links,
-        methods = methods,
     )
 
 
@@ -106,7 +110,7 @@ class Service:
                 return self.link()
             return make_resource(o, self.url, all_methods=True)
 
-class View:
+class Token:
     class Handler(RequestHandler):
         def __init__(self, url, view):
             self.view = view
@@ -224,7 +228,10 @@ class Router:
             attrs = OrderedDict()
             for name,o in self.handlers.items():
                 attrs[name] = o.link()
-            self.service = objects.Resource('Index',self.prefix,attrs)
+            self.service = objects.Resource('Index',
+                metadata={'url':self.prefix},
+                attributes=attrs,
+            )
         return self.service
 
     def handle(self, request):
