@@ -8,37 +8,45 @@ from . import format, objects
 
 HEADERS={'Content-Type': format.CONTENT_TYPE}
 
+def unwrap_selector(obj, next=None):
+    if isinstance(obj, objects.Request):
+        if next is not None:
+            raise Exception('too much data')
+        return obj
+    return obj.list_request(next)
+
+def unwrap_request(method, request, data=None):
+    if isinstance(request, objects.Request):
+        if data is not None:
+            raise Exception('too much data')
+        return request
+
+    if hasattr(request, 'url'):
+        request = request.url
+
+    return objects.Request(method, request, {}, {}, data)
+
 class Client:
     def __init__(self):
         self.session=requests.session()
 
     def get(self, request):
-        if not isinstance(request, objects.Request):
-            if hasattr(request, 'url'):
-                request = request.url
-            request = objects.Request('GET', request, {}, {}, None)
+        request = unwrap_request('GET', request)
 
         if request.method != 'GET':
             raise Exception('mismatch')
         return self.fetch(request)
 
     def post(self, request, data=None):
-        if not isinstance(request, objects.Request):
-            if hasattr(request, 'url'):
-                request = request.url
-            request = objects.Request('POST', request, {}, {}, data)
+        request = unwrap_request('POST', request, data)
 
         if request.method != 'POST':
-            print(request.method)
             raise Exception('mismatch')
         
         return self.fetch(request)
 
     def call(self, request, data=None):
-        if not isinstance(request, objects.Request):
-            if hasattr(request, 'url'):
-                request = request.url
-            request = objects.Request('POST', request, {}, {}, data)
+        request = unwrap_request('POST', request, data)
 
         return self.fetch(request)
 
@@ -52,7 +60,9 @@ class Client:
         raise Exception('no')
     
     def list(self, request, next=None):
-        pass
+        request = unwrap_selector(request, next)
+
+        return self.fetch(request)
 
     def watch(self, request):
         pass
@@ -127,10 +137,11 @@ class RemoteFunction:
         return objects.Request('POST', self.url, {}, {}, data)
 
 class RemoteSelector:
-    def __init__(self, kind,  url, arguments):
+    def __init__(self, kind,  url, arguments, selectors=()):
         self.kind = kind
         self.url = url
         self.arguments = arguments
+        self.selectors = selectors
 
     def __str__(self):
         return "<Link to {}>".format(self.url)
@@ -143,6 +154,39 @@ class RemoteSelector:
                 raise Exception('invalid')
         data.update(kwargs)
         return objects.Request('POST', self.url, {}, {}, data)
+
+    def where(self, **kwargs):
+        new_selectors = list(self.selectors)
+        
+        for name, value in kwargs:
+            new_selectors.append(OrderedDict(
+                key=name,
+                operator="Equals",
+                values=value,
+            ))
+
+        return RemoteSelector(self.kind, self.url, self.arguments, new_selectors)
+
+    def not_where(self, **kwargs):
+        new_selectors = list(self.selectors)
+
+        for name, value in kwargs:
+            new_selectors.append(OrderedDict(
+                key=name,
+                operator="NotEquals",
+                values=value
+        ))
+        
+        return RemoteSelector(self.kind, self.url, self.arguments, new_selectors)
+
+    def list_request(self, next=None):
+        url = self.url
+        params = None
+        return objects.Request(
+                'GET', url, params, {}, None)
+
+class RemoteCollection:
+    pass
 
 class RemoteObject:
     def __init__(self,kind, url, obj):
@@ -184,3 +228,5 @@ def post(arg, data=None):
 def call(arg, data=None):
     return client.call(arg, data)
 
+def list(arg, next=None):
+    return client.list(arg, next)

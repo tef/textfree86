@@ -79,10 +79,14 @@ class FunctionHandler(RequestHandler):
         return self.fn(**data)
 
     def link(self):
-        return objects.Form(self.url, arguments=funcargs(self.fn))
+        if getattr(self.fn, 'safe', False):
+            return objects.Link(self.url)
+        else:
+            return objects.Form(self.url, arguments=funcargs(self.fn))
 
     def embed(self, o=None):
-        return objects.Form(self.url, arguments=funcargs(self.fn))
+        return self.link()
+
 
 class Service:
     def __init__(self):

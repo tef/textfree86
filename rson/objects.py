@@ -77,11 +77,28 @@ class Form(Hyperlink):
 
 @registry.add()
 class Selector(Hyperlink):
-    def __init__(self, kind, url, arguments, selectors=()):
+    def __init__(self, kind, url, arguments):
         self.kind = kind
         self.url = url
         self.arguments = arguments
-        self.selectors = [] # {key,operator, value}
+
+@registry.add()
+class Collection(Hyperlink):
+    def __init__(self, kind, metadata, attributes):
+        self.kind = kind
+        self.items = items
+
+        self.metadata = OrderedDict(metadata)
+
+    @property
+    def url(self):
+        return self.metadata['url']
+
+    @property
+    def next(self):
+        return self.metadata['continue']
+
+
 
 @registry.add()
 class Resource(Hyperlink):
@@ -96,7 +113,7 @@ class Resource(Hyperlink):
 
 @registry.add()
 class Request:
-    def __init__(self,method, url, headers, params, data):
+    def __init__(self,method, url, params, headers, data):
         self.method = method
         self.url = url
         self.headers = headers

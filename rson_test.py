@@ -108,6 +108,8 @@ def test():
         job = client.call(s.Job(name="butt"))
 
         print(job, job.url, job.methods)
+
+        print(client.list(s.Job))
     finally:
         server_thread.stop()
 
