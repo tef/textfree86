@@ -13,7 +13,7 @@ def unwrap_selector(obj, next=None):
         if next is not None:
             raise Exception('too much data')
         return obj
-    return obj.list_request(next)
+    return obj.all(next)
 
 def unwrap_request(method, request, data=None):
     if isinstance(request, objects.Request):
@@ -62,6 +62,7 @@ class Client:
     def list(self, request, next=None):
         request = unwrap_selector(request, next)
 
+        # while ... keep returning them
         return self.fetch(request)
 
     def watch(self, request):
@@ -108,6 +109,8 @@ class Client:
                 return RemoteSelector(obj.kind, url, obj.arguments)
             if isinstance(obj, objects.Resource):
                 return RemoteObject(obj.kind, url, obj)
+            if isinstance(obj, objects.Collection):
+                return RemoteCollection(obj.kind, url, obj)
 
             return obj
 
@@ -147,13 +150,14 @@ class RemoteSelector:
         return "<Link to {}>".format(self.url)
 
     def __call__(self, *args, **kwargs):
+        url = "{}/new".format(self.url)
         data = OrderedDict()
         for key, value in zip(self.arguments, args):
             data[key] = value
             if key in kwargs:
                 raise Exception('invalid')
         data.update(kwargs)
-        return objects.Request('POST', self.url, {}, {}, data)
+        return objects.Request('POST', url, {}, {}, data)
 
     def where(self, **kwargs):
         new_selectors = list(self.selectors)
@@ -179,14 +183,26 @@ class RemoteSelector:
         
         return RemoteSelector(self.kind, self.url, self.arguments, new_selectors)
 
-    def list_request(self, next=None):
-        url = self.url
+    def all(self, next=None):
+        url = "{}/list".format(self.url)
         params = None
         return objects.Request(
-                'GET', url, params, {}, None)
+                'GET', url, {'selector':'*'}, {}, None)
+
+    def first(self):
+        pass # return Request for lookup, not create
 
 class RemoteCollection:
-    pass
+    def __init__(self,kind, url, obj):
+        self.kind = kind
+        self.url = url
+        self.obj = obj
+
+    # __getitem__
+    # length
+    # iter
+    # contains
+    # next()
 
 class RemoteObject:
     def __init__(self,kind, url, obj):

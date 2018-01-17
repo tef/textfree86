@@ -84,7 +84,7 @@ class Selector(Hyperlink):
 
 @registry.add()
 class Collection(Hyperlink):
-    def __init__(self, kind, metadata, attributes):
+    def __init__(self, kind, metadata, items):
         self.kind = kind
         self.items = items
 

@@ -34,7 +34,7 @@ def make_server():
 
     @r.add()
     class Job():
-        class Handler(server.Model.Handler):
+        class Handler(server.Collection.Handler):
             jobs = {}
             def lookup(self, name):
                 return self.jobs[name]
@@ -46,7 +46,10 @@ def make_server():
             def delete(self, name):
                 self.jobs.pop(name)
 
-        name = server.Model.key()
+            def list(self, selector, next=None):
+                return list(self.jobs.values())
+
+        name = server.Collection.key()
 
         def __init__(self, name):
             self.name = name
@@ -109,7 +112,8 @@ def test():
 
         print(job, job.url, job.methods)
 
-        print(client.list(s.Job))
+        for j in client.list(s.Job):
+            print(j)
     finally:
         server_thread.stop()
 

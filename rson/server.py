@@ -98,6 +98,11 @@ class Service:
             self.url = url
 
         def GET(self, path, params):
+            path = path[len(self.url)+1:]
+            if path[:2] == '__': 
+                return
+            if path:
+                return self.service.__dict__[path]()
             return self.service()
 
         def POST(self, path, paramsm, data):
@@ -122,12 +127,19 @@ class Token:
 
         def GET(self, path, params):
             params = {key: format.parse(value) for key,value in params.items()}
-            return self.view(**params)
+            obj = self.view(**params)
+            path = path[len(self.url)+1:]
+            if path[:2] == '__': 
+                return obj
+            elif path:
+                return getattr(obj, path)()
+            else:
+                return obj
 
         def POST(self, path, params, data):
             if params:
-                obj = self.GET(path, params)
-
+                params = {key: format.parse(value) for key,value in params.items()}
+                obj =  self.view(**params)
                 path = path[len(self.url)+1:]
                 if path[:2] == '__': 
                     return
@@ -153,7 +165,7 @@ def model_key(self):
 def model_key(self,value):
     self.id = value
 
-class Model:
+class Collection:
     @staticmethod
     def key():
         return model_key 
@@ -164,19 +176,41 @@ class Model:
             self.url = url
 
         def GET(self, path, params):
-            path = path[len(self.url)+1:]
-            if path:
-                return self.lookup(path)
-            else:
+            method, path = path[len(self.url)+1:], None
+            if '/' in method:
+                method, path = method.split('/',1)
+
+            if method =='id':
+                if '/' in path:
+                    id, obj_method = path.split('/',1)
+                else:
+                    id, obj_method = path, None
+
+                obj = self.lookup(path)
+                if obj_method:
+                    return getattr(obj, obj_method)()
+                else:
+                    return obj
+
+            elif method =='list':
+                return self.list(**params)
+            elif method == '':
                 return self.link()
+            raise Exception(method)
 
         def POST(self, path, params, data):
-            path = path[len(self.url)+1:]
-            if path:
-                path, method = path.split('/',1)
-                return self.invoke(obj, method, data)
-            else:
+            method, path = path[len(self.url)+1:], None
+            print(path)
+            if '/' in method:
+                method, path = method.split('/',1)
+
+            if method == 'id':
+                path, obj_method = path.split('/',1)
+                obj = self.lookup(path)
+                return getattr(obj, obj_method)(**data)
+            elif method == 'new':
                 return self.create(**data)
+            raise Exception(method)
 
         def link(self):
             return objects.Selector(
@@ -192,7 +226,7 @@ class Model:
             return make_resource(o, url, all_methods=False)
 
         def url_for(self, o):
-            return "{}/{}".format(self.url,o.id)
+            return "{}/id/{}".format(self.url,o.id)
 
         def lookup(self, key):
             obj = self.model()
