@@ -16,7 +16,10 @@ from werkzeug.exceptions import HTTPException, NotFound, BadRequest, NotImplemen
 from . import format, objects
 
 def funcargs(m):
-    return m.__code__.co_varnames[:m.__code__.co_argcount]
+    args =  m.__code__.co_varnames[:m.__code__.co_argcount]
+    args = [a for a in args if not a.startswith('_')]
+    if args and args[0] == 'self': args.pop(0)
+    return args
 
 def make_resource(obj, url, all_methods=False):
     cls = obj.__class__
@@ -25,26 +28,19 @@ def make_resource(obj, url, all_methods=False):
     links = []
 
     for k,v in obj.__dict__.items():
-        if k.startswith('__'): continue
+        if k.startswith('_'): continue
         
         attributes[k]= v
 
-    if isinstance(obj, Service):
-        # xxx: fixme?
-        # in service __new__
-        start = 0
-    else:
-        start = 1
-
     for k,v in obj.__class__.__dict__.items():
         if not getattr(v, 'rpc', all_methods): continue
-        if k.startswith('__'): continue
+        if k.startswith('_'): continue
         if v == model_key: continue
 
         if getattr(v, 'safe', False):
             links.append(k)
         else:
-            methods[k] = funcargs(v)[start:]
+            methods[k] = funcargs(v)
 
     return objects.Resource(
         kind = cls.__name__,
@@ -99,7 +95,7 @@ class Service:
 
         def GET(self, path, params):
             path = path[len(self.url)+1:]
-            if path[:2] == '__': 
+            if path[:1] == '_': 
                 return
             if path:
                 return self.service.__dict__[path]()
@@ -107,7 +103,7 @@ class Service:
 
         def POST(self, path, paramsm, data):
             path = path[len(self.url)+1:]
-            if path[:2] == '__': 
+            if path[:1] == '_': 
                 return
             return self.service.__dict__[path](**data)
 
@@ -126,10 +122,10 @@ class Token:
             self.url = url
 
         def GET(self, path, params):
-            params = {key: format.parse(value) for key,value in params.items()}
-            obj = self.view(**params)
             path = path[len(self.url)+1:]
-            if path[:2] == '__': 
+            obj =  self.lookup(params)
+
+            if path.startswith('_'): 
                 return obj
             elif path:
                 return getattr(obj, path)()
@@ -138,16 +134,20 @@ class Token:
 
         def POST(self, path, params, data):
             if params:
-                params = {key: format.parse(value) for key,value in params.items()}
-                obj =  self.view(**params)
+                obj =  self.lookup(params)
                 path = path[len(self.url)+1:]
-                if path[:2] == '__': 
-                    return
+                if path.startswith('_'):
+                    return obj
                 return getattr(obj, path)(**data)
             return self.view(**data)
 
+        def lookup(self, params):
+            params = {key: format.parse(value) for key,value in params.items() if not key.startswith('_')}
+            obj = self.view(**params)
+            return obj
+
         def link(self):
-            args = funcargs(self.view.__init__)[1:]
+            args = funcargs(self.view.__init__)
             return objects.Form(self.url, arguments=args)
 
         def embed(self,o=None):
@@ -187,10 +187,10 @@ class Collection:
                     id, obj_method = path, None
 
                 obj = self.lookup(path)
-                if obj_method:
-                    return getattr(obj, obj_method)()
-                else:
+                if obj_method.startswith('_') or not object_method:
                     return obj
+                else:
+                    return getattr(obj, obj_method)()
 
             elif method =='list':
                 return self.list(**params)
@@ -207,7 +207,10 @@ class Collection:
             if method == 'id':
                 path, obj_method = path.split('/',1)
                 obj = self.lookup(path)
-                return getattr(obj, obj_method)(**data)
+                if obj_method.startswith('_') or not object_method:
+                    return obj
+                else:
+                    return getattr(obj, obj_method)(**data)
             elif method == 'new':
                 return self.create(**data)
             raise Exception(method)
@@ -216,7 +219,7 @@ class Collection:
             return objects.Selector(
                     kind=self.model.__name__,
                     url=self.url, 
-                    arguments=funcargs(self.create)[1:])
+                    arguments=funcargs(self.create))
 
         def embed(self,o=None):
             if o is None or o is self.model:
