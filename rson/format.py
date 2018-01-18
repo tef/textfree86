@@ -7,9 +7,16 @@ import json
 from collections import namedtuple, OrderedDict
 from datetime import datetime, timedelta, timezone
 
-from .objects import InvalidTag, TaggedObject, tag_value_for_object, tag_rson_value, reserved_tags
 
 CONTENT_TYPE="application/rson"
+
+reserved_tags = set("""
+        bool int float complex
+        string bytestring base64
+        duration datetime
+        set list dict object
+        unknown
+""".split())
 
 whitespace = re.compile(r"(?:\ |\t|\uFEFF|\r|\n|#[^\r\n]*(?:\r?\n|$))+")
 
@@ -98,523 +105,535 @@ class ParserErr(Exception):
         Exception.__init__(self, "{} (at pos={})".format(reason, pos))
 
 
-def parse_rson(buf, pos, transform=None):
-    m = whitespace.match(buf, pos)
-    if m:
-        pos = m.end()
+class Codec:
+    content_type = CONTENT_TYPE
 
-    peek = buf[pos]
-    name = None
-    if peek == '@':
-        m = tag_name.match(buf, pos)
-        if m:
-            pos = m.end()
-            name = buf[m.start() + 1:pos].rstrip()
-        else:
-            raise ParserErr(buf, pos)
+    def __init__(self, object_to_tagged, tagged_to_object):
+        self.object_to_tagged = object_to_tagged
+        self.tagged_to_object = tagged_to_object
 
-    peek = buf[pos]
-
-    if peek == '@':
-        raise ParserErr(buf, pos, "Cannot nest tags")
-
-    elif peek == '{':
-        if name in reserved_tags:
-            if name not in ('object', 'record', 'dict'):
-                raise ParserErr(
-                    buf, pos, "{} can't be used on objects".format(name))
-
-        if name == 'dict':
-            out = dict()
-        else:
-            out = OrderedDict()
-
-        pos += 1
-        m = whitespace.match(buf, pos)
-        if m:
-            pos = m.end()
-
-        while buf[pos] != '}':
-            key, pos = parse_rson(buf, pos, transform)
-
-            if key in out:
-                raise SemanticErr('duplicate key: {}, {}'.format(key, out))
-
-            m = whitespace.match(buf, pos)
-            if m:
-                pos = m.end()
-
-            peek = buf[pos]
-            if peek == ':':
-                pos += 1
-                m = whitespace.match(buf, pos)
-                if m:
-                    pos = m.end()
-            else:
-                raise ParserErr(
-                    buf, pos, "Expected key:value pair but found {}".format(repr(peek)))
-
-            item, pos = parse_rson(buf, pos, transform)
-
-            out[key] = item
-
-            peek = buf[pos]
-            if peek == ',':
-                pos += 1
-                m = whitespace.match(buf, pos)
-                if m:
-                    pos = m.end()
-            elif peek != '}':
-                raise ParserErr(
-                    buf, pos, "Expecting a ',', or a '}' but found {}".format(repr(peek)))
-        if name not in (None, 'object', 'record', 'dict'):
-            out = tag_rson_value(name,  out)
-        if transform is not None:
-            out = transform(out)
-        return out, pos + 1
-
-    elif peek == '[':
-        if name in reserved_tags:
-            if name not in ('object', 'list', 'set', 'complex'):
-                raise ParserErr(
-                    buf, pos, "{} can't be used on lists".format(name))
-
-        if name == 'set':
-            out = set()
-        else:
-            out = []
-
-        pos += 1
+    def parse(self, buf, transform=None):
+        obj, pos = self.parse_rson(buf, 0, transform)
 
         m = whitespace.match(buf, pos)
         if m:
             pos = m.end()
-
-        while buf[pos] != ']':
-            item, pos = parse_rson(buf, pos, transform)
-            if name == 'set':
-                if item in out:
-                    raise SemanticErr('duplicate item in set: {}'.format(item))
-                else:
-                    out.add(item)
-            else:
-                out.append(item)
-
             m = whitespace.match(buf, pos)
+
+        if pos != len(buf):
+            raise ParserErr(buf, pos, "Trailing content: {}".format(
+                repr(buf[pos:pos + 10])))
+
+        return obj
+
+
+    def dump(self, obj, transform=None):
+        buf = io.StringIO('')
+        self.dump_rson(obj, buf, transform)
+        return buf.getvalue()
+
+    def parse_rson(self, buf, pos, transform=None):
+        m = whitespace.match(buf, pos)
+        if m:
+            pos = m.end()
+
+        peek = buf[pos]
+        name = None
+        if peek == '@':
+            m = tag_name.match(buf, pos)
             if m:
                 pos = m.end()
-
-            peek = buf[pos]
-            if peek == ',':
-                pos += 1
-                m = whitespace.match(buf, pos)
-                if m:
-                    pos = m.end()
-            elif peek != ']':
-                raise ParserErr(
-                    buf, pos, "Expecting a ',', or a ']' but found {}".format(repr(peek)))
-
-        pos += 1
-
-        if name in (None, 'object', 'list', 'set'):
-            pass
-        elif name == 'complex':
-            out = complex(*out)
-        else:
-            out = tag_rson_value(name,  out)
-
-        if transform is not None:
-            out = transform(out)
-        return out, pos
-
-    elif peek == "'" or peek == '"':
-        if name in reserved_tags:
-            if name not in ('object', 'string', 'float', 'datetime', 'bytestring', 'base64'):
-                raise ParserErr(
-                    buf, pos, "{} can't be used on strings".format(name))
-
-        if name == 'bytestring':
-            s = bytearray()
-            ascii = True
-        else:
-            s = io.StringIO()
-            ascii = False
-
-        # validate string
-        if peek == "'":
-            m = string_sq.match(buf, pos)
-            if m:
-                end = m.end()
+                name = buf[m.start() + 1:pos].rstrip()
             else:
-                raise ParserErr(buf, pos, "Invalid single quoted string")
-        else:
-            m = string_dq.match(buf, pos)
-            if m:
-                end = m.end()
-            else:
-                raise ParserErr(buf, pos, "Invalid double quoted string")
+                raise ParserErr(buf, pos)
 
-        lo = pos + 1  # skip quotes
-        while lo < end - 1:
-            hi = buf.find("\\", lo, end)
-            if hi == -1:
-                if ascii:
-                    s.extend(buf[lo:end - 1].encode('ascii'))
-                else:
-                    s.write(buf[lo:end - 1])  # skip quote
-                break
+        peek = buf[pos]
 
-            if ascii:
-                s.extend(buf[lo:hi].encode('ascii'))
-            else:
-                s.write(buf[lo:hi])
+        if peek == '@':
+            raise ParserErr(buf, pos, "Cannot nest tags")
 
-            esc = buf[hi + 1]
-            if esc in str_escapes:
-                if ascii:
-                    s.extend(byte_escapes[esc])
-                else:
-                    s.write(str_escapes[esc])
-                lo = hi + 2
-            elif esc == 'x':
-                n = int(buf[hi + 2:hi + 4], 16)
-                if ascii:
-                    s.append(n)
-                else:
-                    s.write(chr(n))
-                lo = hi + 4
-            elif esc == 'u':
-                n = int(buf[hi + 2:hi + 6], 16)
-                if ascii:
-                    if n > 0xFF:
-                        raise ParserErr(
-                            buf, hi, 'bytestring cannot have escape > 255')
-                    s.append(n)
-                else:
-                    if 0xD800 <= n <= 0xDFFF:
-                        raise ParserErr(
-                            buf, hi, 'string cannot have surrogate pairs')
-                    s.write(chr(n))
-                lo = hi + 6
-            elif esc == 'U':
-                n = int(buf[hi + 2:hi + 10], 16)
-                if ascii:
-                    if n > 0xFF:
-                        raise ParserErr(
-                            buf, hi, 'bytestring cannot have escape > 255')
-                    s.append(n)
-                else:
-                    if 0xD800 <= n <= 0xDFFF:
-                        raise ParserErr(
-                            buf, hi, 'string cannot have surrogate pairs')
-                    s.write(chr(n))
-                lo = hi + 10
-            elif esc == '\n':
-                lo = hi + 2
-            elif (buf[hi + 1:hi + 3] == '\r\n'):
-                lo = hi + 3
-            else:
-                raise ParserErr(
-                    buf, hi, "Unkown escape character {}".format(repr(esc)))
-
-        if name == 'bytestring':
-            out = s
-        else:
-            out = s.getvalue()
-
-            if name in (None, 'string', 'object'):
-                pass
-            elif name == 'base64':
-                try:
-                    out = base64.standard_b64decode(out)
-                except Exception as e:
-                    raise ParserErr(buf, pos, "Invalid base64") from e
-            elif name == 'datetime':
-                try:
-                    out = parse_datetime(out)
-                except Exception as e:
+        elif peek == '{':
+            if name in reserved_tags:
+                if name not in ('object', 'record', 'dict'):
                     raise ParserErr(
-                        buf, pos, "Invalid datetime: {}".format(repr(out))) from e
-            elif name == 'float':
-                m = c99_flt.match(out)
-                if m:
-                    out = float.fromhex(out)
-                else:
-                    raise ParserErr(
-                        buf, pos, "invalid C99 float literal: {}".format(out))
+                        buf, pos, "{} can't be used on objects".format(name))
+
+            if name == 'dict':
+                out = dict()
             else:
-                out = tag_rson_value(name,  out)
+                out = OrderedDict()
 
-        if transform is not None:
-            out = transform(out)
-        return out, end
-
-    elif peek in "-+0123456789":
-        if name in reserved_tags:
-            if name not in ('object', 'int', 'float', 'duration'):
-                raise ParserErr(
-                    buf, pos, "{} can't be used on numbers".format(name))
-
-        flt_end = None
-        exp_end = None
-
-        sign = +1
-
-        if buf[pos] in "+-":
-            if buf[pos] == "-":
-                sign = -1
             pos += 1
-        peek = buf[pos:pos + 2]
-
-        if peek in ('0x', '0o', '0b'):
-            if peek == '0x':
-                base = 16
-                m = int_b16.match(buf, pos)
-                if m:
-                    end = m.end()
-                else:
-                    raise ParserErr(
-                        buf, pos, "Invalid hexadecimal number (0x...)")
-            elif peek == '0o':
-                base = 8
-                m = int_b8.match(buf, pos)
-                if m:
-                    end = m.end()
-                else:
-                    raise ParserErr(buf, pos, "Invalid octal number (0o...)")
-            elif peek == '0b':
-                base = 2
-                m = int_b2.match(buf, pos)
-                if m:
-                    end = m.end()
-                else:
-                    raise ParserErr(
-                        buf, pos, "Invalid hexadecimal number (0x...)")
-
-            out = sign * int(buf[pos + 2:end].replace('_', ''), base)
-        else:
-            m = int_b10.match(buf, pos)
+            m = whitespace.match(buf, pos)
             if m:
-                int_end = m.end()
-                end = int_end
+                pos = m.end()
+
+            while buf[pos] != '}':
+                key, pos = self.parse_rson(buf, pos, transform)
+
+                if key in out:
+                    raise SemanticErr('duplicate key: {}, {}'.format(key, out))
+
+                m = whitespace.match(buf, pos)
+                if m:
+                    pos = m.end()
+
+                peek = buf[pos]
+                if peek == ':':
+                    pos += 1
+                    m = whitespace.match(buf, pos)
+                    if m:
+                        pos = m.end()
+                else:
+                    raise ParserErr(
+                        buf, pos, "Expected key:value pair but found {}".format(repr(peek)))
+
+                item, pos = self.parse_rson(buf, pos, transform)
+
+                out[key] = item
+
+                peek = buf[pos]
+                if peek == ',':
+                    pos += 1
+                    m = whitespace.match(buf, pos)
+                    if m:
+                        pos = m.end()
+                elif peek != '}':
+                    raise ParserErr(
+                        buf, pos, "Expecting a ',', or a '}' but found {}".format(repr(peek)))
+            if name not in (None, 'object', 'record', 'dict'):
+                out = self.tagged_to_object(name,  out)
+            if transform is not None:
+                out = transform(out)
+            return out, pos + 1
+
+        elif peek == '[':
+            if name in reserved_tags:
+                if name not in ('object', 'list', 'set', 'complex'):
+                    raise ParserErr(
+                        buf, pos, "{} can't be used on lists".format(name))
+
+            if name == 'set':
+                out = set()
             else:
-                raise ParserErr(buf, pos, "Invalid number")
+                out = []
 
-            t = flt_b10.match(buf, end)
-            if t:
-                flt_end = t.end()
-                end = flt_end
+            pos += 1
 
-            e = exp_b10.match(buf, end)
-            if e:
-                exp_end = e.end()
-                end = exp_end
+            m = whitespace.match(buf, pos)
+            if m:
+                pos = m.end()
 
-            if flt_end or exp_end:
-                out = sign * float(buf[pos:end].replace('_', ''))
+            while buf[pos] != ']':
+                item, pos = self.parse_rson(buf, pos, transform)
+                if name == 'set':
+                    if item in out:
+                        raise SemanticErr('duplicate item in set: {}'.format(item))
+                    else:
+                        out.add(item)
+                else:
+                    out.append(item)
+
+                m = whitespace.match(buf, pos)
+                if m:
+                    pos = m.end()
+
+                peek = buf[pos]
+                if peek == ',':
+                    pos += 1
+                    m = whitespace.match(buf, pos)
+                    if m:
+                        pos = m.end()
+                elif peek != ']':
+                    raise ParserErr(
+                        buf, pos, "Expecting a ',', or a ']' but found {}".format(repr(peek)))
+
+            pos += 1
+
+            if name in (None, 'object', 'list', 'set'):
+                pass
+            elif name == 'complex':
+                out = complex(*out)
             else:
-                out = sign * int(buf[pos:end].replace('_', ''), 10)
+                out = self.tagged_to_object(name,  out)
 
-        if name is None or name == 'object':
-            pass
-        elif name == 'duration':
-            out = timedelta(seconds=out)
-        elif name == 'int':
-            if flt_end or exp_end:
+            if transform is not None:
+                out = transform(out)
+            return out, pos
+
+        elif peek == "'" or peek == '"':
+            if name in reserved_tags:
+                if name not in ('object', 'string', 'float', 'datetime', 'bytestring', 'base64'):
+                    raise ParserErr(
+                        buf, pos, "{} can't be used on strings".format(name))
+
+            if name == 'bytestring':
+                s = bytearray()
+                ascii = True
+            else:
+                s = io.StringIO()
+                ascii = False
+
+            # validate string
+            if peek == "'":
+                m = string_sq.match(buf, pos)
+                if m:
+                    end = m.end()
+                else:
+                    raise ParserErr(buf, pos, "Invalid single quoted string")
+            else:
+                m = string_dq.match(buf, pos)
+                if m:
+                    end = m.end()
+                else:
+                    raise ParserErr(buf, pos, "Invalid double quoted string")
+
+            lo = pos + 1  # skip quotes
+            while lo < end - 1:
+                hi = buf.find("\\", lo, end)
+                if hi == -1:
+                    if ascii:
+                        s.extend(buf[lo:end - 1].encode('ascii'))
+                    else:
+                        s.write(buf[lo:end - 1])  # skip quote
+                    break
+
+                if ascii:
+                    s.extend(buf[lo:hi].encode('ascii'))
+                else:
+                    s.write(buf[lo:hi])
+
+                esc = buf[hi + 1]
+                if esc in str_escapes:
+                    if ascii:
+                        s.extend(byte_escapes[esc])
+                    else:
+                        s.write(str_escapes[esc])
+                    lo = hi + 2
+                elif esc == 'x':
+                    n = int(buf[hi + 2:hi + 4], 16)
+                    if ascii:
+                        s.append(n)
+                    else:
+                        s.write(chr(n))
+                    lo = hi + 4
+                elif esc == 'u':
+                    n = int(buf[hi + 2:hi + 6], 16)
+                    if ascii:
+                        if n > 0xFF:
+                            raise ParserErr(
+                                buf, hi, 'bytestring cannot have escape > 255')
+                        s.append(n)
+                    else:
+                        if 0xD800 <= n <= 0xDFFF:
+                            raise ParserErr(
+                                buf, hi, 'string cannot have surrogate pairs')
+                        s.write(chr(n))
+                    lo = hi + 6
+                elif esc == 'U':
+                    n = int(buf[hi + 2:hi + 10], 16)
+                    if ascii:
+                        if n > 0xFF:
+                            raise ParserErr(
+                                buf, hi, 'bytestring cannot have escape > 255')
+                        s.append(n)
+                    else:
+                        if 0xD800 <= n <= 0xDFFF:
+                            raise ParserErr(
+                                buf, hi, 'string cannot have surrogate pairs')
+                        s.write(chr(n))
+                    lo = hi + 10
+                elif esc == '\n':
+                    lo = hi + 2
+                elif (buf[hi + 1:hi + 3] == '\r\n'):
+                    lo = hi + 3
+                else:
+                    raise ParserErr(
+                        buf, hi, "Unkown escape character {}".format(repr(esc)))
+
+            if name == 'bytestring':
+                out = s
+            else:
+                out = s.getvalue()
+
+                if name in (None, 'string', 'object'):
+                    pass
+                elif name == 'base64':
+                    try:
+                        out = base64.standard_b64decode(out)
+                    except Exception as e:
+                        raise ParserErr(buf, pos, "Invalid base64") from e
+                elif name == 'datetime':
+                    try:
+                        out = parse_datetime(out)
+                    except Exception as e:
+                        raise ParserErr(
+                            buf, pos, "Invalid datetime: {}".format(repr(out))) from e
+                elif name == 'float':
+                    m = c99_flt.match(out)
+                    if m:
+                        out = float.fromhex(out)
+                    else:
+                        raise ParserErr(
+                            buf, pos, "invalid C99 float literal: {}".format(out))
+                else:
+                    out = self.tagged_to_object(name,  out)
+
+            if transform is not None:
+                out = transform(out)
+            return out, end
+
+        elif peek in "-+0123456789":
+            if name in reserved_tags:
+                if name not in ('object', 'int', 'float', 'duration'):
+                    raise ParserErr(
+                        buf, pos, "{} can't be used on numbers".format(name))
+
+            flt_end = None
+            exp_end = None
+
+            sign = +1
+
+            if buf[pos] in "+-":
+                if buf[pos] == "-":
+                    sign = -1
+                pos += 1
+            peek = buf[pos:pos + 2]
+
+            if peek in ('0x', '0o', '0b'):
+                if peek == '0x':
+                    base = 16
+                    m = int_b16.match(buf, pos)
+                    if m:
+                        end = m.end()
+                    else:
+                        raise ParserErr(
+                            buf, pos, "Invalid hexadecimal number (0x...)")
+                elif peek == '0o':
+                    base = 8
+                    m = int_b8.match(buf, pos)
+                    if m:
+                        end = m.end()
+                    else:
+                        raise ParserErr(buf, pos, "Invalid octal number (0o...)")
+                elif peek == '0b':
+                    base = 2
+                    m = int_b2.match(buf, pos)
+                    if m:
+                        end = m.end()
+                    else:
+                        raise ParserErr(
+                            buf, pos, "Invalid hexadecimal number (0x...)")
+
+                out = sign * int(buf[pos + 2:end].replace('_', ''), base)
+            else:
+                m = int_b10.match(buf, pos)
+                if m:
+                    int_end = m.end()
+                    end = int_end
+                else:
+                    raise ParserErr(buf, pos, "Invalid number")
+
+                t = flt_b10.match(buf, end)
+                if t:
+                    flt_end = t.end()
+                    end = flt_end
+
+                e = exp_b10.match(buf, end)
+                if e:
+                    exp_end = e.end()
+                    end = exp_end
+
+                if flt_end or exp_end:
+                    out = sign * float(buf[pos:end].replace('_', ''))
+                else:
+                    out = sign * int(buf[pos:end].replace('_', ''), 10)
+
+            if name is None or name == 'object':
+                pass
+            elif name == 'duration':
+                out = timedelta(seconds=out)
+            elif name == 'int':
+                if flt_end or exp_end:
+                    raise ParserErr(
+                        buf, pos, "Can't tag floating point with @int")
+            elif name == 'float':
+                if not isintance(out, float):
+                    out = float(out)
+            else:
+                out = self.tagged_to_object(name, out)
+
+            if transform is not None:
+                out = transform(out)
+            return out, end
+
+        else:
+            m = identifier.match(buf, pos)
+            if m:
+                end = m.end()
+                item = buf[pos:end]
+            else:
+                raise ParserErr(buf, pos)
+
+            if item not in builtin_names:
                 raise ParserErr(
-                    buf, pos, "Can't tag_rson_value floating point with @int")
-        elif name == 'float':
-            if not isintance(out, float):
-                out = float(out)
-        else:
-            out = tag_rson_value(name, out)
+                    buf, pos, "{} is not a recognised built-in".format(repr(name)))
 
-        if transform is not None:
-            out = transform(out)
-        return out, end
+            out = builtin_names[item]
 
-    else:
-        m = identifier.match(buf, pos)
-        if m:
-            end = m.end()
-            item = buf[pos:end]
-        else:
-            raise ParserErr(buf, pos)
-
-        if item not in builtin_names:
-            raise ParserErr(
-                buf, pos, "{} is not a recognised built-in".format(repr(name)))
-
-        out = builtin_names[item]
-
-        if name is None or name == 'object':
-            pass
-        elif name == 'bool':
-            if item not in ('true', 'false'):
-                raise ParserErr(buf, pos, '@bool can only true or false')
-        elif name in reserved_tags:
-            raise ParserErr(
-                buf, pos, "{} has no meaning for {}".format(repr(name), item))
-        else:
-            out = tag_rson_value(name,  out)
-
-        if transform is not None:
-            out = transform(out)
-        return out, end
-
-    raise ParserErr(buf, pos)
-
-
-def parse(buf, transform=None):
-    obj, pos = parse_rson(buf, 0, transform)
-
-    m = whitespace.match(buf, pos)
-    if m:
-        pos = m.end()
-        m = whitespace.match(buf, pos)
-
-    if pos != len(buf):
-        raise ParserErr(buf, pos, "Trailing content: {}".format(
-            repr(buf[pos:pos + 10])))
-
-    return obj
-
-
-def dump(obj, transform=None):
-    buf = io.StringIO('')
-    dump_rson(obj, buf, transform)
-    return buf.getvalue()
-
-
-def dump_rson(obj, buf, transform=None):
-    if transform:
-        obj = transform(obj)
-    if obj is True or obj is False or obj is None:
-        buf.write(builtin_values[obj])
-    elif isinstance(obj, str):
-        buf.write('"')
-        for c in obj:
-            if c in escaped:
-                buf.write(escaped)
-            elif ord(c) < 0x20:
-                buf.write('\\x{:02X}'.format(ord(c)))
+            if name is None or name == 'object':
+                pass
+            elif name == 'bool':
+                if item not in ('true', 'false'):
+                    raise ParserErr(buf, pos, '@bool can only true or false')
+            elif name in reserved_tags:
+                raise ParserErr(
+                    buf, pos, "{} has no meaning for {}".format(repr(name), item))
             else:
-                buf.write(c)
-        buf.write('"')
-    elif isinstance(obj, int):
-        buf.write(str(obj))
-    elif isinstance(obj, float):
-        hex = obj.hex()
-        if hex.startswith(('0', '-')):
+                out = self.tagged_to_object(name,  out)
+
+            if transform is not None:
+                out = transform(out)
+            return out, end
+
+        raise ParserErr(buf, pos)
+
+
+
+    def dump_rson(self, obj, buf, transform=None):
+        if transform:
+            obj = transform(obj)
+        if obj is True or obj is False or obj is None:
+            buf.write(builtin_values[obj])
+        elif isinstance(obj, str):
+            buf.write('"')
+            for c in obj:
+                if c in escaped:
+                    buf.write(escaped)
+                elif ord(c) < 0x20:
+                    buf.write('\\x{:02X}'.format(ord(c)))
+                else:
+                    buf.write(c)
+            buf.write('"')
+        elif isinstance(obj, int):
             buf.write(str(obj))
+        elif isinstance(obj, float):
+            hex = obj.hex()
+            if hex.startswith(('0', '-')):
+                buf.write(str(obj))
+            else:
+                buf.write('@float "{}"'.format(hex))
+        elif isinstance(obj, complex):
+            buf.write("@complex [{}, {}]".format(obj.real, obj.imag))
+        elif isinstance(obj, (bytes, bytearray)):
+            buf.write('@base64 "')
+            # assume no escaping needed
+            buf.write(base64.standard_b64encode(obj).decode('ascii'))
+            buf.write('"')
+        elif isinstance(obj, (list, tuple)):
+            buf.write('[')
+            first = True
+            for x in obj:
+                if first:
+                    first = False
+                else:
+                    buf.write(", ")
+                self.dump_rson(x, buf, transform)
+            buf.write(']')
+        elif isinstance(obj, set):
+            buf.write('@set [')
+            first = True
+            for x in obj:
+                if first:
+                    first = False
+                else:
+                    buf.write(", ")
+                self.dump_rson(x, buf, transform)
+            buf.write(']')
+        elif isinstance(obj, OrderedDict):
+            buf.write('{')
+            first = True
+            for k, v in obj.items():
+                if first:
+                    first = False
+                else:
+                    buf.write(", ")
+                self.dump_rson(k, buf, transform)
+                buf.write(": ")
+                self.dump_rson(v, buf, transform)
+            buf.write('}')
+        elif isinstance(obj, dict):
+            buf.write('@dict {')
+            first = True
+            for k in sorted(obj.keys()):
+                if first:
+                    first = False
+                else:
+                    buf.write(", ")
+                self.dump_rson(k, buf, transform)
+                buf.write(": ")
+                self.dump_rson(obj[k], buf, transform)
+            buf.write('}')
+        elif isinstance(obj, datetime):
+            buf.write('@datetime "{}"'.format(format_datetime(obj)))
+        elif isinstance(obj, timedelta):
+            buf.write('@duration {}'.format(obj.total_seconds()))
         else:
-            buf.write('@float "{}"'.format(hex))
-    elif isinstance(obj, complex):
-        buf.write("@complex [{}, {}]".format(obj.real, obj.imag))
-    elif isinstance(obj, (bytes, bytearray)):
-        buf.write('@base64 "')
-        # assume no escaping needed
-        buf.write(base64.standard_b64encode(obj).decode('ascii'))
-        buf.write('"')
-    elif isinstance(obj, (list, tuple)):
-        buf.write('[')
-        first = True
-        for x in obj:
-            if first:
-                first = False
+            nv = self.object_to_tagged(obj)
+            name, value = nv
+            if not isinstance(value, OrderedDict) and isinstance(value, dict):
+                value = OrderedDict(value)
+            buf.write('@{} '.format(name))
+            self.dump_rson(value, buf, transform)  # XXX: prevent @foo @foo
+
+if __name__ == '__main__':
+    codec = Codec(None, None)
+
+    parse = codec.parse
+    dump = codec.dump
+
+
+    def test_parse(buf, obj):
+        out = parse(buf)
+
+        if (obj != obj and out == out) or (obj == obj and obj != out):
+            raise AssertionError('{} != {}'.format(obj, out))
+
+
+    def test_dump(obj, buf):
+        out = dump(obj)
+        if buf != out:
+            raise AssertionError('{} != {}'.format(buf, out))
+
+
+    def test_parse_err(buf, exc):
+        try:
+            obj = parse(buf)
+        except Exception as e:
+            if isinstance(e, exc):
+                return
             else:
-                buf.write(", ")
-            dump_rson(x, buf, transform)
-        buf.write(']')
-    elif isinstance(obj, set):
-        buf.write('@set [')
-        first = True
-        for x in obj:
-            if first:
-                first = False
-            else:
-                buf.write(", ")
-            dump_rson(x, buf, transform)
-        buf.write(']')
-    elif isinstance(obj, OrderedDict):
-        buf.write('{')
-        first = True
-        for k, v in obj.items():
-            if first:
-                first = False
-            else:
-                buf.write(", ")
-            dump_rson(k, buf, transform)
-            buf.write(": ")
-            dump_rson(v, buf, transform)
-        buf.write('}')
-    elif isinstance(obj, dict):
-        buf.write('@dict {')
-        first = True
-        for k in sorted(obj.keys()):
-            if first:
-                first = False
-            else:
-                buf.write(", ")
-            dump_rson(k, buf, transform)
-            buf.write(": ")
-            dump_rson(obj[k], buf, transform)
-        buf.write('}')
-    elif isinstance(obj, datetime):
-        buf.write('@datetime "{}"'.format(format_datetime(obj)))
-    elif isinstance(obj, timedelta):
-        buf.write('@duration {}'.format(obj.total_seconds()))
-    else:
-        nv = tag_value_for_object(obj)
-        name, value = nv
-        if not isinstance(value, OrderedDict) and isinstance(value, dict):
-            value = OrderedDict(value)
-        buf.write('@{} '.format(name))
-        dump_rson(value, buf, transform)
-
-
-def test_parse(buf, obj):
-    out = parse(buf)
-
-    if (obj != obj and out == out) or (obj == obj and obj != out):
-        raise AssertionError('{} != {}'.format(obj, out))
-
-
-def test_dump(obj, buf):
-    out = dump(obj)
-    if buf != out:
-        raise AssertionError('{} != {}'.format(buf, out))
-
-
-def test_parse_err(buf, exc):
-    try:
-        obj = parse(buf)
-    except Exception as e:
-        if isinstance(e, exc):
-            return
+                raise AssertionError(
+                    '{} did not cause {}, but {}'.format(buf, exc, e)) from e
         else:
             raise AssertionError(
-                '{} did not cause {}, but {}'.format(buf, exc, e)) from e
-    else:
-        raise AssertionError(
-            '{} did not cause {}, parsed:{}'.format(buf, exc, obj))
+                '{} did not cause {}, parsed:{}'.format(buf, exc, obj))
 
 
-def test_dump_err(obj, exc):
-    try:
-        buf = dump(obj)
-    except Exception as e:
-        if isinstance(e, exc):
-            return
+    def test_dump_err(obj, exc):
+        try:
+            buf = dump(obj)
+        except Exception as e:
+            if isinstance(e, exc):
+                return
+            else:
+                raise AssertionError(
+                    '{} did not cause {}, but '.format(obj, exc, e))
         else:
             raise AssertionError(
-                '{} did not cause {}, but '.format(obj, exc, e))
-    else:
-        raise AssertionError(
-            '{} did not cause {}, dumping: {}'.format(obj, exc, buf))
+                '{} did not cause {}, dumping: {}'.format(obj, exc, buf))
 
 
-def main():
     test_parse("0", 0)
     test_parse("0x0_1_2_3", 0x123)
     test_parse("0o0_1_2_3", 0o123)
@@ -697,5 +716,3 @@ def main():
     print('tests passed')
 
 
-if __name__ == '__main__':
-    main()

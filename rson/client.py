@@ -6,14 +6,7 @@ import requests
 
 from . import format, objects
 
-HEADERS={'Content-Type': format.CONTENT_TYPE}
-
-def unwrap_selector(obj, next=None):
-    if isinstance(obj, objects.Request):
-        if next is not None:
-            raise Exception('too much data')
-        return obj
-    return obj.all(next)
+HEADERS={'Content-Type': objects.CONTENT_TYPE}
 
 def unwrap_request(method, request, data=None):
     if isinstance(request, objects.Request):
@@ -50,17 +43,46 @@ class Client:
 
         return self.fetch(request)
 
-    def create(self, request, data=None):
-        raise Exception('no')
+    def delete(self, request, arg=None):
+        if isinstance(request, RemoteSelector):
+            request = request.delete(arg)
+            print(request.url, request.data)
+        elif isinstance(request, objects.Request):
+            pass
+        else:
+            url = getattr(request, 'url', request)
+
+            raise Exception('no')
+
+        return self.fetch(request)
+
+    def create(self, request, data):
+        if isinstance(request, RemoteSelector):
+            request = request.create(**data)
+            print(request.url, request.data)
+        elif instance(obj, objects.Request):
+            pass
+        else:
+            url = getattr(request, 'url', request)
+
+            raise Exception('no')
+
+        return self.fetch(request)
 
     def update(self, request, data):
         raise Exception('no')
     
-    def delete(self, request):
-        raise Exception('no')
     
-    def list(self, request, next=None):
-        request = unwrap_selector(request, next)
+    def list(self, request, limit=None):
+
+        if isinstance(request, RemoteSelector):
+            request = request.list(limit)
+        elif instance(obj, objects.Request):
+            pass
+        else:
+            url = getattr(request, 'url', request)
+
+            raise Exception('no')
 
         # while ... keep returning them
         return self.fetch(request)
@@ -78,7 +100,7 @@ class Client:
         params = request.params
         
         if request.data is not None:
-            data = format.dump(request.data)
+            data = objects.dump(request.data)
         else:
             data = None
 
@@ -114,7 +136,7 @@ class Client:
 
             return obj
 
-        obj = format.parse(result.text, transform)
+        obj = objects.parse(result.text, transform)
 
         return obj
 
@@ -148,8 +170,12 @@ class RemoteSelector:
 
     def __str__(self):
         return "<Link to {}>".format(self.url)
+    
+    def delete(self, name):
+        url = "{}/delete/{}".format(self.url, name)
+        return objects.Request('POST', url, {}, {}, None)
 
-    def __call__(self, *args, **kwargs):
+    def create(self, *args, **kwargs):
         url = "{}/new".format(self.url)
         data = OrderedDict()
         for key, value in zip(self.arguments, args):
@@ -183,14 +209,20 @@ class RemoteSelector:
         
         return RemoteSelector(self.kind, self.url, self.arguments, new_selectors)
 
-    def all(self, next=None):
+    def list(self, limit=None):
         url = "{}/list".format(self.url)
-        params = None
+        params = OrderedDict()
+        params['selector'] = '*'
+        if limit:
+            params['limit'] = limit
         return objects.Request(
-                'GET', url, {'selector':'*'}, {}, None)
+                'GET', url, params, {}, None)
 
-    def first(self):
+    def next(self, limit=None):
         pass # return Request for lookup, not create
+
+    def delete_list(self):
+        pass
 
 class RemoteCollection:
     def __init__(self,kind, url, obj):
@@ -244,5 +276,9 @@ def post(arg, data=None):
 def call(arg, data=None):
     return client.call(arg, data)
 
-def list(arg, next=None):
-    return client.list(arg, next)
+def delete(req, arg=None):
+    return client.delete(req, arg)
+def list(arg):
+    return client.list(arg)
+def create(arg, data):
+    return client.create(arg, data)

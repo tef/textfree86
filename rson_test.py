@@ -44,9 +44,9 @@ def make_server():
                 return j
 
             def delete(self, name):
-                self.jobs.pop(name)
+                return self.jobs.pop(name)
 
-            def list(self, selector, next=None):
+            def list(self, selector, limit, next):
                 return list(self.jobs.values())
 
         name = server.Collection.key()
@@ -108,12 +108,15 @@ def test():
 
         print(value, counter.num)
 
-        job = client.call(s.Job(name="butt"))
+        job = client.create(s.Job,dict(name="butt"))
+            # client.call(s.Job.create(...))
 
-        print(job, job.url, job.methods)
+        print(job, job.url, job.methods, job.attributes)
 
         for j in client.list(s.Job):
             print(j)
+
+        print(client.delete(s.Job,job.name))
     finally:
         server_thread.stop()
 

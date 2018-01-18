@@ -21,34 +21,43 @@ def funcargs(m):
     if args and args[0] == 'self': args.pop(0)
     return args
 
-def make_resource(obj, url, all_methods=False):
+def make_resource(obj, url, metadata=None, all_methods=False):
     cls = obj.__class__
     attributes = OrderedDict()
     methods = OrderedDict()
     links = []
-
-    for k,v in obj.__dict__.items():
-        if k.startswith('_'): continue
-        
-        attributes[k]= v
+    has_key = False
 
     for k,v in obj.__class__.__dict__.items():
+        if v is model_key:
+            attributes[k] = obj.id
+            has_key = True
+            continue
         if not getattr(v, 'rpc', all_methods): continue
         if k.startswith('_'): continue
-        if v == model_key: continue
 
         if getattr(v, 'safe', False):
             links.append(k)
         else:
             methods[k] = funcargs(v)
 
+    for k,v in obj.__dict__.items():
+        if k.startswith('_'): continue
+        if has_key and k=='id': continue
+        
+        attributes[k]= v
+
+    meta = OrderedDict(
+        url = url,
+        links = links,
+        methods = methods,
+    )
+    if metadata:
+        meta.update(metadata)
+
     return objects.Resource(
         kind = cls.__name__,
-        metadata = OrderedDict(
-            url = url,
-            links = links,
-            methods = methods,
-        ),
+        metadata = meta,
         attributes = attributes,
     )
 
@@ -87,6 +96,11 @@ class FunctionHandler(RequestHandler):
 class Service:
     def __init__(self):
         pass
+
+    def __getattribute__(self, name):
+        if name.startswith('_'):
+            return object.__getattribute__(self, name)
+        return getattr(object.__getattribute__(self, '__class__'),name)
 
     class Handler(RequestHandler):
         def __init__(self, url, service):
@@ -142,7 +156,7 @@ class Token:
             return self.view(**data)
 
         def lookup(self, params):
-            params = {key: format.parse(value) for key,value in params.items() if not key.startswith('_')}
+            params = {key: objects.parse(value) for key,value in params.items() if not key.startswith('_')}
             obj = self.view(**params)
             return obj
 
@@ -153,7 +167,7 @@ class Token:
         def embed(self,o=None):
             if o is None or o is self.view:
                 return self.link()
-            params = {key: format.dump(value) for key, value in o.__dict__.items()}
+            params = {key: objects.dump(value) for key, value in o.__dict__.items()}
             url = "{}?{}".format(self.url, urlencode(params))
 
             return make_resource(o, url, all_methods=True)
@@ -193,7 +207,10 @@ class Collection:
                     return getattr(obj, obj_method)()
 
             elif method =='list':
-                return self.list(**params)
+                selector = params['selector']
+                limit = params.get('limit')
+                next = params.get('continue')
+                return self.list(selector, limit, next)
             elif method == '':
                 return self.link()
             raise Exception(method)
@@ -213,6 +230,8 @@ class Collection:
                     return getattr(obj, obj_method)(**data)
             elif method == 'new':
                 return self.create(**data)
+            elif method == 'delete':
+                return self.delete(path)
             raise Exception(method)
 
         def link(self):
@@ -224,9 +243,12 @@ class Collection:
         def embed(self,o=None):
             if o is None or o is self.model:
                 return self.link()
-
+            meta = OrderedDict(
+                    id = o.id,
+                    collection = self.url
+            )
             url = self.url_for(o)
-            return make_resource(o, url, all_methods=False)
+            return make_resource(o, url, metadata=meta, all_methods=False)
 
         def url_for(self, o):
             return "{}/id/{}".format(self.url,o.id)
@@ -235,8 +257,11 @@ class Collection:
             obj = self.model()
             obj.id = path
 
-        def list(self, selector, next=None):
-            pass
+        def list(self, selector, limit, next):
+            raise Exception('no')
+
+        def delete(self, name):
+            raise Exception('no')
 
         def watch(self, selector):
             pass
@@ -285,7 +310,7 @@ class Router:
             if name in self.handlers:
                 data  = request.data.decode('utf-8')
                 if data:
-                    args = format.parse(data)
+                    args = objects.parse(data)
                 else:
                     args = None
 
@@ -310,8 +335,8 @@ class Router:
         if out is None:
             return Response('', status='204 None')
 
-        result = format.dump(out, transform)
-        return Response(result, content_type=format.CONTENT_TYPE) 
+        result = objects.dump(out, transform)
+        return Response(result, content_type=objects.CONTENT_TYPE) 
     def app(self):
         return WSGIApp(self.handle)
 

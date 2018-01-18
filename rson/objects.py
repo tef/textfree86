@@ -1,18 +1,20 @@
 from collections import OrderedDict
 from urllib.parse import urljoin
 
-reserved_tags = set("""
-        bool int float complex
-        string bytestring base64
-        duration datetime
-        set list dict object
-        unknown
-""".split())
+from .format import Codec, reserved_tags, CONTENT_TYPE
 
 class Registry:
     def __init__(self):
         self.classes = OrderedDict()
         self.tag_for = OrderedDict()
+        self.codec = Codec(self.as_tagged, self.from_tagged)
+        self.content_type = self.codec.content_type
+
+    def parse(self, buf, transform):
+        return self.codec.parse(buf, transform)
+    
+    def dump(self, obj, transform):
+        return self.codec.dump(obj, transform)
 
     def add(self, name=None):
         def _add(cls):
@@ -35,7 +37,7 @@ class Registry:
             raise InvalidTag('unknown',
                 "Can't find tag for object {}: unknown class {}".format(obj, obj.__class__))
 
-    def from_tag(self, name, value):
+    def from_tagged(self, name, value):
         if name in reserved_tags:
             raise InvalidTag(
                 name, "Can't use tag {} with {}, {} is reserved".format(value, name, name))
@@ -94,11 +96,6 @@ class Collection(Hyperlink):
     def url(self):
         return self.metadata['url']
 
-    @property
-    def next(self):
-        return self.metadata['continue']
-
-
 
 @registry.add()
 class Resource(Hyperlink):
@@ -110,6 +107,12 @@ class Resource(Hyperlink):
     def url(self):
         return self.metadata['url']
 
+@registry.add()
+class Struct:
+    def __init__(self, kind, names, values):
+        self.kind = kind
+        self.names = names
+        self.values = values
 
 @registry.add()
 class Request:
@@ -129,11 +132,9 @@ class Response:
         self.data = data
 
 
-def tag_value_for_object(obj):
-    return registry.as_tagged(obj)
+def parse(obj, transform=None):
+    return registry.parse(obj, transform)
 
-def tag_rson_value(name, value):
-    return registry.from_tag(name, value)
-
-
+def dump(obj, transform=None):
+    return registry.dump(obj, transform)
 
