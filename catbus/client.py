@@ -38,7 +38,17 @@ class Client:
         
         return self.fetch(request)
 
-    def call(self, request, data=None):
+    def call(self, request, method=None, data=None):
+        if isinstance(request, RemoteFunction):
+            if method is None:
+                request = request(**data)
+            else:
+                raise Exception('no')
+        elif isinstance(request, RemoteObject):
+            if method is None:
+                raise Exception('no')
+            else:
+                request = getattr(request, method)(**data)
         request = unwrap_request('POST', request, data)
 
         return self.fetch(request)
@@ -78,18 +88,20 @@ class Client:
 
     
     def list(self, request, limit=None):
-
         if isinstance(request, RemoteSelector):
             request = request.list(limit)
         elif instance(obj, objects.Request):
             pass
         else:
-            url = getattr(request, 'url', request)
-
             raise Exception('no')
 
         # while ... keep returning them
-        return self.fetch(request)
+        obj = self.fetch(request)
+        if isinstance(obj, RemoteList):
+            raise Exception('not yet')
+        else:
+            for x in obj:
+                yield obj
 
     def watch(self, request):
         pass
@@ -306,8 +318,8 @@ def get(arg):
 def post(arg, data=None):
     return client.post(arg, data)
 
-def call(arg, data=None):
-    return client.call(arg, data)
+def call(arg, method=None, data=None):
+    return client.call(arg, method, data)
 
 def delete(req, arg=None):
     return client.delete(req, arg)
