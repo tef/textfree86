@@ -43,35 +43,39 @@ class Client:
 
         return self.fetch(request)
 
-    def delete(self, request, arg=None):
-        if isinstance(request, RemoteSelector):
-            request = request.delete(arg)
-            print(request.url, request.data)
-        elif isinstance(request, objects.Request):
-            pass
-        else:
-            url = getattr(request, 'url', request)
-
-            raise Exception('no')
-
-        return self.fetch(request)
-
     def create(self, request, data):
         if isinstance(request, RemoteSelector):
             request = request.create(**data)
-            print(request.url, request.data)
-        elif instance(obj, objects.Request):
-            pass
         else:
-            url = getattr(request, 'url', request)
-
-            raise Exception('no')
+            request = unwrap_request('PUT', request, data)
+        if request.method not in ('PUT', 'POST'):
+            raise Exception('mismatch')
 
         return self.fetch(request)
 
     def update(self, request, data):
         raise Exception('no')
     
+    def lookup(self, request, data):
+        if isinstance(request, RemoteSelector):
+            request = request.lookup(data)
+        else:
+            request = unwrap_request('GET', request)
+            if request.method != 'GET' or data != None:
+                raise Exception('mismatch')
+
+        return self.fetch(request)
+
+    def delete(self, request, arg=None):
+        if isinstance(request, RemoteSelector):
+            request = request.delete(arg)
+        else:
+            request = unwrap_request('DELETE', request)
+        if request.method not in ('DELETE', 'POST'):
+            raise Exception('mismatch')
+
+        return self.fetch(request)
+
     
     def list(self, request, limit=None):
 
@@ -174,6 +178,9 @@ class RemoteSelector:
     def __getitem__(self, name):
         return self.lookup(name)
 
+    def __call__(self, *args, **kwargs):
+        return self.create(*args, **kwargs)
+
     def lookup(self, name):
         url = "{}/id/{}".format(self.url, name)
         return objects.Request('GET', url, {}, {}, None)
@@ -189,12 +196,15 @@ class RemoteSelector:
         return objects.Request('POST', url, {}, {}, data)
 
     def delete(self, name):
-        url = "{}/delete/{}".format(self.url, name)
-        return objects.Request('POST', url, {}, {}, None)
+        url = "{}/id/{}".format(self.url, name)
+        return objects.Request('DELETE', url, {}, {}, None)
 
     def get_params(self,limit):
         params = OrderedDict()
-        params['selector'] = '*'
+        if not self.selectors: 
+            params['selector'] = '*'
+        else:
+            raise Exception('nope')
         if limit:
             params['limit'] = limit
         return params

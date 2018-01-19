@@ -1,7 +1,7 @@
 from rson import client, server
 
 def make_server():
-    r = server.Router(prefix="/test/")
+    r = server.Namespace(prefix="/test/")
     @r.add()
     def echo(x):
         return x
@@ -12,6 +12,8 @@ def make_server():
 
     @r.add()
     class MyEndpoint(server.Service):
+        # no self, all methods exposed.
+
         def rpc_one(a,b):
             return a+b
 
@@ -23,6 +25,10 @@ def make_server():
 
     @r.add()
     class Counter(server.Token):
+        # Tokens exist as /name?state urls, not stored on server
+        # re-creates a Counter with every request & calls methods
+        # before disposing it
+
         def __init__(self, num=0):
             self.num = num
 
@@ -34,6 +40,9 @@ def make_server():
 
     @r.add()
     class Job():
+        # A service.Collection maps a collection of any
+        # object, stored elsewhere
+
         class Handler(server.Collection.Handler):
             jobs = {}
             def key_for(self, obj):
@@ -65,7 +74,7 @@ def make_server():
             self.state = 'run'
 
         def hidden(self):
-            pass
+            return 'Not exposed over RPC'
 
     return server.Server(r.app(), port=8888)
 
@@ -117,7 +126,7 @@ def test():
         for j in client.list(s.Job):
             print(j)
 
-        print(client.delete(s.Job,job.name))
+        print(client.delete(job))
     finally:
         server_thread.stop()
 

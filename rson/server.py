@@ -21,18 +21,14 @@ def funcargs(m):
     if args and args[0] == 'self': args.pop(0)
     return args
 
-def make_resource(obj, url, metadata=None, all_methods=False):
+def make_resource(obj, url, metadata=None):
     cls = obj.__class__
     attributes = OrderedDict()
     methods = OrderedDict()
     links = []
-    has_key = False
+    all_methods = getattr(cls, 'rpc', False)
 
     for k,v in obj.__class__.__dict__.items():
-        if v is model_key:
-            attributes[k] = obj.id
-            has_key = True
-            continue
         if not getattr(v, 'rpc', all_methods): continue
         if k.startswith('_'): continue
 
@@ -43,7 +39,6 @@ def make_resource(obj, url, metadata=None, all_methods=False):
 
     for k,v in obj.__dict__.items():
         if k.startswith('_'): continue
-        if has_key and k=='id': continue
         
         attributes[k]= v
 
@@ -95,6 +90,8 @@ class FunctionHandler(RequestHandler):
 
 
 class Service:
+    rpc = True
+
     def __init__(self):
         pass
 
@@ -127,9 +124,10 @@ class Service:
         def embed(self,o=None):
             if o is None or o is self.service:
                 return self.link()
-            return make_resource(o, self.url, all_methods=True)
+            return make_resource(o, self.url)
 
 class Token:
+    rpc = True
     class Handler(RequestHandler):
         def __init__(self, url, view):
             self.view = view
@@ -178,20 +176,9 @@ class Token:
             params = {key: objects.dump(value) for key, value in o.__dict__.items()}
             url = "{}?{}".format(self.url, urlencode(params))
 
-            return make_resource(o, url, all_methods=True)
-
-@property
-def model_key(self):
-    return self.id
-@model_key.setter
-def model_key(self,value):
-    self.id = value
+            return make_resource(o, url)
 
 class Collection:
-    @staticmethod
-    def key():
-        return model_key 
-
     class Handler(RequestHandler):
         def __init__(self, url, model):
             self.model = model
@@ -209,17 +196,18 @@ class Collection:
                 else:
                     id, obj_method = path, None
 
-                if obj_method.startswith('_'):
+                if obj_method and obj_method.startswith('_'):
                     raise Forbidden()
-
-                obj = self.lookup(path)
                 
                 if not obj_method:
                     if method == 'GET':
-                        return obj
+                        return self.lookup(name)
+                    elif method == 'DELETE':
+                        return self.delete(path)
                     else:
                         raise MethodNotAllowed()
                 else:
+                    obj = self.lookup(name)
                     if method == 'GET':
                         return getattr(obj, obj_method)()
                     elif method == 'POST':
@@ -264,7 +252,7 @@ class Collection:
                     collection = self.url
             )
             url = self.url_for(o)
-            return make_resource(o, url, metadata=meta, all_methods=False)
+            return make_resource(o, url, metadata=meta)
 
         def url_for(self, o):
             return "{}/id/{}".format(self.url,self.key_for(o))
@@ -292,7 +280,7 @@ class Collection:
         def watch(self, selector):
             raise Exception('unimplemented')
 
-class Router:
+class Namespace:
     def __init__(self, prefix="/"):
         self.handlers = OrderedDict()
         self.paths = OrderedDict()
