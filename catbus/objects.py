@@ -1,7 +1,7 @@
 from collections import OrderedDict
 from urllib.parse import urljoin
 
-from .format import Codec, reserved_tags, CONTENT_TYPE
+from .rson import Codec, reserved_tags, CONTENT_TYPE
 
 class Registry:
     def __init__(self):

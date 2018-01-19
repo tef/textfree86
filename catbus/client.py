@@ -4,7 +4,7 @@ from collections import OrderedDict
 
 import requests
 
-from . import format, objects
+from . import objects
 
 HEADERS={'Content-Type': objects.CONTENT_TYPE}
 

@@ -13,7 +13,7 @@ from werkzeug.utils import redirect as Redirect
 from werkzeug.wrappers import Request, Response
 from werkzeug.exceptions import HTTPException, Forbidden, NotFound, BadRequest, NotImplemented, MethodNotAllowed
 
-from . import format, objects
+from . import objects
 
 def funcargs(m):
     args =  m.__code__.co_varnames[:m.__code__.co_argcount]
