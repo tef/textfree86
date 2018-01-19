@@ -235,7 +235,7 @@ class Collection:
             raise Exception(method)
 
         def link(self):
-            return objects.Selector(
+            return objects.Collection(
                     kind=self.model.__name__,
                     url=self.url, 
                     arguments=funcargs(self.create))
@@ -244,27 +244,37 @@ class Collection:
             if o is None or o is self.model:
                 return self.link()
             meta = OrderedDict(
-                    id = o.id,
+                    id = self.key_for(o),
                     collection = self.url
             )
             url = self.url_for(o)
             return make_resource(o, url, metadata=meta, all_methods=False)
 
         def url_for(self, o):
-            return "{}/id/{}".format(self.url,o.id)
+            return "{}/id/{}".format(self.url,self.key_for(o))
+
+        # override
+
+        def key_for(self, obj):
+            raise Exception('unimplemented')
 
         def lookup(self, key):
-            obj = self.model()
-            obj.id = path
+            raise Exception('unimplemented')
 
-        def list(self, selector, limit, next):
-            raise Exception('no')
+        def create(self, **kwargs):
+            raise Exception('unimplemented')
 
         def delete(self, name):
-            raise Exception('no')
+            raise Exception('unimplemented')
+
+        def delete_list(self, selector, limit):
+            pass
+
+        def list(self, selector, limit, next):
+            raise Exception('unimplemented')
 
         def watch(self, selector):
-            pass
+            raise Exception('unimplemented')
 
 class Router:
     def __init__(self, prefix="/"):

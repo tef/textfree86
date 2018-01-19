@@ -36,6 +36,9 @@ def make_server():
     class Job():
         class Handler(server.Collection.Handler):
             jobs = {}
+            def key_for(self, obj):
+                return obj.name
+
             def lookup(self, name):
                 return self.jobs[name]
 
@@ -48,8 +51,6 @@ def make_server():
 
             def list(self, selector, limit, next):
                 return list(self.jobs.values())
-
-        name = server.Collection.key()
 
         def __init__(self, name):
             self.name = name

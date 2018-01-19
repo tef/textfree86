@@ -78,14 +78,14 @@ class Form(Hyperlink):
         self.arguments = arguments
 
 @registry.add()
-class Selector(Hyperlink):
+class Collection(Hyperlink):
     def __init__(self, kind, url, arguments):
         self.kind = kind
         self.url = url
         self.arguments = arguments
 
 @registry.add()
-class Collection(Hyperlink):
+class List(Hyperlink):
     def __init__(self, kind, metadata, items):
         self.kind = kind
         self.items = items

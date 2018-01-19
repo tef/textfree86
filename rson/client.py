@@ -127,12 +127,12 @@ class Client:
                 return RemoteFunction('GET', url, [])
             if isinstance(obj, objects.Form):
                 return RemoteFunction('POST', url, obj.arguments)
-            if isinstance(obj, objects.Selector):
+            if isinstance(obj, objects.Collection):
                 return RemoteSelector(obj.kind, url, obj.arguments)
             if isinstance(obj, objects.Resource):
                 return RemoteObject(obj.kind, url, obj)
-            if isinstance(obj, objects.Collection):
-                return RemoteCollection(obj.kind, url, obj)
+            if isinstance(obj, objects.List):
+                return RemoteList(obj.kind, url, obj)
 
             return obj
 
@@ -170,11 +170,11 @@ class RemoteSelector:
 
     def __str__(self):
         return "<Link to {}>".format(self.url)
-    
-    def delete(self, name):
-        url = "{}/delete/{}".format(self.url, name)
-        return objects.Request('POST', url, {}, {}, None)
 
+    def lookup(self, name):
+        url = "{}/id/{}".format(self.url, name)
+        return objects.Request('GET', url, {}, {}, None)
+    
     def create(self, *args, **kwargs):
         url = "{}/new".format(self.url)
         data = OrderedDict()
@@ -184,6 +184,32 @@ class RemoteSelector:
                 raise Exception('invalid')
         data.update(kwargs)
         return objects.Request('POST', url, {}, {}, data)
+
+    def delete(self, name):
+        url = "{}/delete/{}".format(self.url, name)
+        return objects.Request('POST', url, {}, {}, None)
+
+    def get_params(self,limit):
+        params = OrderedDict()
+        params['selector'] = '*'
+        if limit:
+            params['limit'] = limit
+        return params
+
+    def delete_list(self, selector, limit):
+        url = "{}/delete".format(self.url)
+        params = self.get_params(limit)
+        return objects.Request('POST', url, params, {}, None)
+
+    def list(self, limit=None):
+        url = "{}/list".format(self.url)
+        params = self.get_params(limit)
+        return objects.Request('GET', url, params, {}, None)
+
+    def next(self, limit=None):
+        # so that remote collection / selectors have
+        # similar apis
+        return self.list(limit)
 
     def where(self, **kwargs):
         new_selectors = list(self.selectors)
@@ -209,26 +235,20 @@ class RemoteSelector:
         
         return RemoteSelector(self.kind, self.url, self.arguments, new_selectors)
 
-    def list(self, limit=None):
-        url = "{}/list".format(self.url)
-        params = OrderedDict()
-        params['selector'] = '*'
-        if limit:
-            params['limit'] = limit
-        return objects.Request(
-                'GET', url, params, {}, None)
 
-    def next(self, limit=None):
-        pass # return Request for lookup, not create
-
-    def delete_list(self):
-        pass
-
-class RemoteCollection:
+class RemoteList:
     def __init__(self,kind, url, obj):
         self.kind = kind
         self.url = url
         self.obj = obj
+
+    def next(self):
+        params = OrderedDict()
+
+        return object.Request('GET', self.url, params, {}, None)
+
+    def values(self):
+        return self.obj['items']
 
     # __getitem__
     # length
