@@ -1,17 +1,17 @@
-from rson import client, server
+from catbus import client, server
 
 def make_server():
-    r = server.Namespace(prefix="/test/")
-    @r.add()
+    n = server.Namespace(prefix="/test/")
+    @n.add()
     def echo(x):
         return x
 
-    @r.add()
+    @n.add()
     @server.rpc(safe=True)
     def test():
         return echo
 
-    @r.add()
+    @n.add()
     class MyEndpoint(server.Service):
         # no self, all methods exposed.
 
@@ -24,7 +24,7 @@ def make_server():
         def rpc_three():
             return None
 
-    @r.add()
+    @n.add()
     class Counter(server.Token):
         # Tokens exist as /name?state urls, not stored on server
         # re-creates a Counter with every request & calls methods
@@ -39,7 +39,7 @@ def make_server():
         def value(self):
             return self.num
 
-    @r.add()
+    @n.add()
     class Total(server.Singleton):
         def __init__(self):
             self.sum = 0
@@ -52,7 +52,7 @@ def make_server():
         def total(self):
             return self.sum
 
-    @r.add()
+    @n.add()
     class Job():
         # A service.Collection maps a collection of any
         # object, stored elsewhere
@@ -90,7 +90,7 @@ def make_server():
         def hidden(self):
             return 'Not exposed over RPC'
 
-    return server.Server(r.app(), port=8888)
+    return server.Server(n.app(), port=8888)
 
 def test():
     server_thread = make_server()
