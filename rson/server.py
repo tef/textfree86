@@ -11,7 +11,7 @@ from wsgiref.simple_server import make_server, WSGIRequestHandler
 
 from werkzeug.utils import redirect as Redirect
 from werkzeug.wrappers import Request, Response
-from werkzeug.exceptions import HTTPException, NotFound, BadRequest, NotImplemented, MethodNotAllowed
+from werkzeug.exceptions import HTTPException, Forbidden, NotFound, BadRequest, NotImplemented, MethodNotAllowed
 
 from . import format, objects
 
@@ -77,11 +77,12 @@ class FunctionHandler(RequestHandler):
         self.fn = function
         self.url = url
 
-    def GET(self, path, params):
-        return self.fn
-
-    def POST(self, path, params, data):
-        return self.fn(**data)
+    def on_request(self, method, path, params, data):
+        if method == 'GET':
+            return self.fn
+        elif method == 'POST':
+            return self.fn(**data)
+        raise MethodNotAllowed()
 
     def link(self):
         if getattr(self.fn, 'safe', False):
@@ -107,19 +108,18 @@ class Service:
             self.service = service
             self.url = url
 
-        def GET(self, path, params):
+        def on_request(self, method, path, params, data):
             path = path[len(self.url)+1:]
             if path[:1] == '_': 
-                return
-            if path:
-                return self.service.__dict__[path]()
-            return self.service()
-
-        def POST(self, path, paramsm, data):
-            path = path[len(self.url)+1:]
-            if path[:1] == '_': 
-                return
-            return self.service.__dict__[path](**data)
+                raise Forbidden()
+            if method == 'GET':
+                if path:
+                    return self.service.__dict__[path]()
+                return self.service()
+            elif method == 'POST':
+                return self.service.__dict__[path](**data)
+            else:
+                raise MethodNotAllowed()
 
         def link(self):
             return objects.Link(self.url)
@@ -135,25 +135,33 @@ class Token:
             self.view = view
             self.url = url
 
-        def GET(self, path, params):
+        def on_request(self, method, path, params, data):
             path = path[len(self.url)+1:]
-            obj =  self.lookup(params)
-
             if path.startswith('_'): 
-                return obj
-            elif path:
-                return getattr(obj, path)()
-            else:
-                return obj
+                raise Forbidden()
 
-        def POST(self, path, params, data):
             if params:
                 obj =  self.lookup(params)
-                path = path[len(self.url)+1:]
-                if path.startswith('_'):
-                    return obj
-                return getattr(obj, path)(**data)
-            return self.view(**data)
+
+                if not path:
+                    if method == 'GET':
+                        return obj
+                    raise MethodNotAllowed()
+
+                if method == 'POST':
+                    return getattr(obj, path)(**data)
+                elif method == 'GET':
+                    return getattr(obj, path)()
+                else:
+                    raise MethodNotAllowed()
+            else:
+                if path:
+                    raise NotImplemented()
+                if method == 'POST':
+                    return self.view(**data)
+                elif method == 'GET':
+                    return self.link()
+                raise MethodNotAllowed()
 
         def lookup(self, params):
             params = {key: objects.parse(value) for key,value in params.items() if not key.startswith('_')}
@@ -189,50 +197,58 @@ class Collection:
             self.model = model
             self.url = url
 
-        def GET(self, path, params):
-            method, path = path[len(self.url)+1:], None
-            if '/' in method:
-                method, path = method.split('/',1)
+        def on_request(self, method, path, params, data):
+            col_method, path = path[len(self.url)+1:], None
 
-            if method =='id':
+            if '/' in col_method:
+                col_method, path = col_method.split('/',1)
+
+            if col_method =='id':
                 if '/' in path:
                     id, obj_method = path.split('/',1)
                 else:
                     id, obj_method = path, None
 
-                obj = self.lookup(path)
-                if obj_method.startswith('_') or not object_method:
-                    return obj
-                else:
-                    return getattr(obj, obj_method)()
+                if obj_method.startswith('_'):
+                    raise Forbidden()
 
-            elif method =='list':
+                obj = self.lookup(path)
+                
+                if not obj_method:
+                    if method == 'GET':
+                        return obj
+                    else:
+                        raise MethodNotAllowed()
+                else:
+                    if method == 'GET':
+                        return getattr(obj, obj_method)()
+                    elif method == 'POST':
+                        return getattr(obj, obj_method)(**data)
+                    else:
+                        raise MethodNotAllowed()
+
+            elif col_method =='list':
+                if method != 'GET':
+                    raise MethodNotAllowed()
                 selector = params['selector']
                 limit = params.get('limit')
                 next = params.get('continue')
                 return self.list(selector, limit, next)
-            elif method == '':
-                return self.link()
-            raise Exception(method)
-
-        def POST(self, path, params, data):
-            method, path = path[len(self.url)+1:], None
-            print(path)
-            if '/' in method:
-                method, path = method.split('/',1)
-
-            if method == 'id':
-                path, obj_method = path.split('/',1)
-                obj = self.lookup(path)
-                if obj_method.startswith('_') or not object_method:
-                    return obj
-                else:
-                    return getattr(obj, obj_method)(**data)
-            elif method == 'new':
+            elif col_method == 'new':
+                if method != 'POST':
+                    raise MethodNotAllowed()
                 return self.create(**data)
-            elif method == 'delete':
+            elif col_method == 'delete':
+                if method != 'POST':
+                    raise MethodNotAllowed()
                 return self.delete(path)
-            raise Exception(method)
+            elif col_method == '':
+                if method != 'GET':
+                    raise MethodNotAllowed()
+                return self.link()
+
+            raise NotImplelmented(method)
+
 
         def link(self):
             return objects.Collection(
@@ -326,10 +342,7 @@ class Router:
 
                 params = request.args
 
-                if request.method == 'GET':
-                    out = self.handlers[name].GET(path, params)
-                else:
-                    out = self.handlers[name].POST(path, params, args)
+                out = self.handlers[name].on_request(request.method, path, params, args)
             else:
                 raise NotFound(path)
         

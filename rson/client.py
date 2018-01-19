@@ -171,6 +171,9 @@ class RemoteSelector:
     def __str__(self):
         return "<Link to {}>".format(self.url)
 
+    def __getitem__(self, name):
+        return self.lookup(name)
+
     def lookup(self, name):
         url = "{}/id/{}".format(self.url, name)
         return objects.Request('GET', url, {}, {}, None)
@@ -196,7 +199,7 @@ class RemoteSelector:
             params['limit'] = limit
         return params
 
-    def delete_list(self, selector, limit):
+    def delete_list(self, limit=None):
         url = "{}/delete".format(self.url)
         params = self.get_params(limit)
         return objects.Request('POST', url, params, {}, None)
