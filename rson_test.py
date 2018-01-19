@@ -7,6 +7,7 @@ def make_server():
         return x
 
     @r.add()
+    @server.rpc(safe=True)
     def test():
         return echo
 
@@ -37,6 +38,19 @@ def make_server():
 
         def value(self):
             return self.num
+
+    @r.add()
+    class Total(server.Singleton):
+        def __init__(self):
+            self.sum = 0
+
+        def add(self, n):
+            self.sum += n
+            return self
+        
+        @server.rpc(safe=True)
+        def total(self):
+            return self.sum
 
     @r.add()
     class Job():
@@ -114,6 +128,18 @@ def test():
         print(counter)
         print('nice')
         value = client.post(counter.value())
+
+        total = client.call(s.Total())
+
+        print(client.call(total.total()))
+
+        client.call(total.add(5))
+        client.call(total.add(5))
+        client.call(total.add(5))
+
+        print(client.call(total.total()))
+
+
 
 
         print(value, counter.num)

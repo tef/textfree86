@@ -107,7 +107,7 @@ class Service:
 
         def on_request(self, method, path, params, data):
             path = path[len(self.url)+1:]
-            if path[:1] == '_': 
+            if path.startswith('_'): 
                 raise Forbidden()
             if method == 'GET':
                 if path:
@@ -177,6 +177,43 @@ class Token:
             url = "{}?{}".format(self.url, urlencode(params))
 
             return make_resource(o, url)
+
+class Singleton:
+    rpc = True
+
+    def __init__(self):
+        pass
+
+    class Handler(RequestHandler):
+        def __init__(self, url, cls):
+            self.cls = cls
+            self.url = url
+            self.obj = self.cls()
+
+        def on_request(self, method, path, params, data):
+            path = path[len(self.url)+1:]
+            if path.startswith('_'): 
+                raise Forbidden()
+            if method == 'GET':
+                if path:
+                    return getattr(self.obj, path)()
+                else:
+                    return self.cls()
+            elif method == 'POST':
+                if path:
+                    return getattr(self.obj, path)(**data)
+                else:
+                    raise MethodNotAllowed()
+            else:
+                raise MethodNotAllowed()
+
+        def link(self):
+            return objects.Link(self.url)
+
+        def embed(self,o=None):
+            if o is None or o is self.cls:
+                return self.link()
+            return make_resource(o, self.url)
 
 class Collection:
     class Handler(RequestHandler):
@@ -340,7 +377,6 @@ class Namespace:
                     return self.handlers[self.paths[o]].embed(o)
             elif o.__class__ in self.paths:
                 return self.handlers[self.paths[o.__class__]].embed(o)
-
             return o
 
         if out is None:
