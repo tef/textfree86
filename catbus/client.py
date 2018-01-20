@@ -54,7 +54,7 @@ class Client:
         return self.fetch(request)
 
     def create(self, request, data):
-        if isinstance(request, RemoteSelector):
+        if isinstance(request, RemoteCollection):
             request = request.create(**data)
         else:
             request = unwrap_request('PUT', request, data)
@@ -67,7 +67,7 @@ class Client:
         raise Exception('no')
     
     def lookup(self, request, data):
-        if isinstance(request, RemoteSelector):
+        if isinstance(request, RemoteCollection):
             request = request.lookup(data)
         else:
             request = unwrap_request('GET', request)
@@ -77,7 +77,7 @@ class Client:
         return self.fetch(request)
 
     def delete(self, request, arg=None):
-        if isinstance(request, RemoteSelector):
+        if isinstance(request, RemoteCollection):
             request = request.delete(arg)
         else:
             request = unwrap_request('DELETE', request)
@@ -88,7 +88,7 @@ class Client:
 
     
     def list(self, request, limit=None):
-        if isinstance(request, RemoteSelector):
+        if isinstance(request, RemoteCollection):
             request = request.list(limit)
         elif instance(obj, objects.Request):
             pass
@@ -101,7 +101,7 @@ class Client:
             raise Exception('not yet')
         else:
             for x in obj:
-                yield obj
+                yield x
 
     def watch(self, request):
         pass
@@ -144,7 +144,7 @@ class Client:
             if isinstance(obj, objects.Form):
                 return RemoteFunction('POST', url, obj.arguments)
             if isinstance(obj, objects.Collection):
-                return RemoteSelector(obj.kind, url, obj.arguments)
+                return RemoteCollection(obj.kind, url, obj.arguments)
             if isinstance(obj, objects.Resource):
                 return RemoteObject(obj.kind, url, obj)
             if isinstance(obj, objects.List):
@@ -157,10 +157,11 @@ class Client:
         return obj
 
 class RemoteFunction:
-    def __init__(self, method, url, arguments):
+    def __init__(self, method, url, arguments, defaults=()):
         self.method = method
         self.url = url
         self.arguments = arguments
+        self.defaults = defaults
 
     def __str__(self):
         return "<Link to {}>".format(self.url)
@@ -175,9 +176,13 @@ class RemoteFunction:
             if key in kwargs:
                 raise Exception('invalid')
         data.update(kwargs)
+        for key in self.arguments:
+            if key not in data:
+                if key in self.defaults:
+                    data[key] = self.defaults
         return objects.Request('POST', self.url, {}, {}, data)
 
-class RemoteSelector:
+class RemoteCollection:
     def __init__(self, kind,  url, arguments, selectors=()):
         self.kind = kind
         self.url = url
@@ -246,7 +251,7 @@ class RemoteSelector:
                 values=value,
             ))
 
-        return RemoteSelector(self.kind, self.url, self.arguments, new_selectors)
+        return RemoteCollection(self.kind, self.url, self.arguments, new_selectors)
 
     def not_where(self, **kwargs):
         new_selectors = list(self.selectors)
@@ -258,7 +263,7 @@ class RemoteSelector:
                 values=value
         ))
         
-        return RemoteSelector(self.kind, self.url, self.arguments, new_selectors)
+        return RemoteCollection(self.kind, self.url, self.arguments, new_selectors)
 
 
 class RemoteList:

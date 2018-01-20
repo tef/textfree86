@@ -73,9 +73,10 @@ class Link(Hyperlink):
 
 @registry.add()
 class Form(Hyperlink):
-    def __init__(self, url, arguments):
+    def __init__(self, url, arguments, defaults=None):
         self.url = url
         self.arguments = arguments
+        self.defaults = defaults
 
 @registry.add()
 class Collection(Hyperlink):
