@@ -221,9 +221,16 @@ class Singleton:
             return make_resource(o, self.url)
 
 class Collection:
+    def dict_handler(d):
+        class Handler(Collection.RequestHandler):
+            pass
+
+
+        return Handler
+
     class Handler(RequestHandler):
-        def __init__(self, url, model):
-            self.model = model
+        def __init__(self, url, cls):
+            self.cls = cls
             self.url = url
 
         def on_request(self, method, path, params, data):
@@ -267,7 +274,7 @@ class Collection:
             elif col_method == 'new':
                 if method != 'POST':
                     raise MethodNotAllowed()
-                return self.create(**data)
+                return self.create(data)
             elif col_method == 'delete':
                 if method != 'POST':
                     raise MethodNotAllowed()
@@ -282,12 +289,12 @@ class Collection:
 
         def link(self):
             return objects.Collection(
-                    kind=self.model.__name__,
+                    kind=self.cls.__name__,
                     url=self.url, 
-                    arguments=funcargs(self.create))
+                    arguments=funcargs(self.cls.__init__))
 
         def embed(self,o=None):
-            if o is None or o is self.model:
+            if o is None or o is self.cls:
                 return self.link()
             meta = OrderedDict(
                     id = self.key_for(o),
@@ -307,7 +314,7 @@ class Collection:
         def lookup(self, key):
             raise Exception('unimplemented')
 
-        def create(self, **kwargs):
+        def create(self, data):
             raise Exception('unimplemented')
 
         def delete(self, name):

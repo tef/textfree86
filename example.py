@@ -31,21 +31,6 @@ def make_server():
 
 
     @n.add()
-    class Counter(server.Token):
-        # Tokens exist as /name?state urls, not stored on server
-        # re-creates a Counter with every request & calls methods
-        # before disposing it
-
-        def __init__(self, num=0):
-            self.num = num
-
-        def next(self):
-            return Counter(self.num+1)
-
-        def value(self):
-            return self.num
-
-    @n.add()
     class Total(server.Singleton):
         def __init__(self):
             self.sum = 0
@@ -71,7 +56,8 @@ def make_server():
             def lookup(self, name):
                 return self.jobs[name]
 
-            def create(self, name):
+            def create(self, data):
+                name = data['name']
                 j = self.jobs[name] = Job(name)
                 return j
 
@@ -95,6 +81,22 @@ def make_server():
 
         def hidden(self):
             return 'Not exposed over RPC'
+
+
+    @n.add()
+    class Counter(server.Token):
+        # Tokens exist as /name?state urls, not stored on server
+        # re-creates a Counter with every request & calls methods
+        # before disposing it
+
+        def __init__(self, num=0):
+            self.num = num
+
+        def next(self):
+            return Counter(self.num+1)
+
+        def value(self):
+            return self.num
 
     return server.Server(n.app(), port=8888)
 
