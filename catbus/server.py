@@ -221,9 +221,29 @@ class Singleton:
             return make_resource(o, self.url)
 
 class Collection:
-    def dict_handler(d):
-        class Handler(Collection.RequestHandler):
-            pass
+    def dict_handler(name, d=None):
+        if d is None:
+            d = OrderedDict()
+        class Handler(Collection.Handler):
+            items = d
+            id = name
+
+            def key_for(self, obj):
+                return getattr(obj, self.id)
+
+            def lookup(self, name):
+                return self.items[name]
+
+            def create(self, data):
+                name = data[self.id]
+                j = self.items[name] = self.cls(**data)
+                return j
+
+            def delete(self, name):
+                return self.items.pop(name)
+
+            def list(self, selector, limit, next):
+                return list(self.items.values())
 
 
         return Handler

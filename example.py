@@ -30,6 +30,8 @@ def make_server():
             return datetime.now(timezone.utc)
 
 
+    # A singleton object
+
     @n.add()
     class Total(server.Singleton):
         def __init__(self):
@@ -43,29 +45,11 @@ def make_server():
         def total(self):
             return self.sum
 
+   # A collection of instances
+
     @n.add()
     class Job():
-        # A service.Collection maps a collection of any
-        # object, stored elsewhere
-
-        class Handler(server.Collection.Handler):
-            jobs = {}
-            def key_for(self, obj):
-                return obj.name
-
-            def lookup(self, name):
-                return self.jobs[name]
-
-            def create(self, data):
-                name = data['name']
-                j = self.jobs[name] = Job(name)
-                return j
-
-            def delete(self, name):
-                return self.jobs.pop(name)
-
-            def list(self, selector, limit, next):
-                return list(self.jobs.values())
+        Handler = server.Collection.dict_handler('name')
 
         def __init__(self, name):
             self.name = name
