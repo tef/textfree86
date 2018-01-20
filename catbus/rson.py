@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+"""restructured object notation, or rson
+
+(in effect, json with tagged objects)
+
+- allows bom, trailing commas, any object as root, and comments
+- bytestrings, datetimes, sugar for numbers too
+
+see spec/rson/md
+"""
+
 import re
 import io
 import base64

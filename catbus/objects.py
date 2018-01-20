@@ -1,3 +1,8 @@
+"""rson.objects
+
+registry of objects sent/recieved on the wire. 
+"""
+
 from collections import OrderedDict
 from urllib.parse import urljoin
 

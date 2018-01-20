@@ -1,3 +1,8 @@
+"""catbus.server
+a http server that routes requests to the
+mapped objects, handling transforming them
+into rson wire objects
+"""
 import threading
 import types
 import socket

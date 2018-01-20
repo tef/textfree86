@@ -1,5 +1,7 @@
 from catbus import client, server
 
+from datetime import datetime, timezone
+
 def make_server():
     n = server.Namespace(prefix="/test/")
     @n.add()
@@ -23,6 +25,10 @@ def make_server():
 
         def rpc_three():
             return None
+
+        def now():
+            return datetime.now(timezone.utc)
+
 
     @n.add()
     class Counter(server.Token):
@@ -120,6 +126,8 @@ def test():
         print(client.call(e.rpc_two(3,b=4)))
         
         print(client.call(e.rpc_three()))
+
+        print(client.call(e.now()))
 
         counter = client.call(s.Counter(10))
         counter = client.call(counter.next())

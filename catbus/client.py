@@ -1,3 +1,11 @@
+"""catbus.client
+
+This is a simple client with a handful of crud 
+or http-like methods. The real magic is in the
+RemoteObject/RemoteFunction wrapper objects.
+
+"""
+
 from functools import singledispatch
 from urllib.parse import urljoin
 from collections import OrderedDict
