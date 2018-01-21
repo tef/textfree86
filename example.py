@@ -1,5 +1,6 @@
 from catbus import client, server
 
+import collections
 from datetime import datetime, timezone
 
 def make_server():
@@ -47,9 +48,11 @@ def make_server():
 
    # A collection of instances
 
+    jobs = collections.OrderedDict()
+
     @n.add()
     class Job():
-        Handler = server.Collection.dict_handler('name')
+        Handler = server.Collection.dict_handler('name', jobs)
 
         def __init__(self, name):
             self.name = name

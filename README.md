@@ -64,5 +64,39 @@ total = client.call(store.total())
 print(total)
 ```
 
+## serving a class, and instances
 
+```
+@n.add()
+class Job():
+    Handler = server.Collection.dict_handler('name', jobs)
+
+    def __init__(self, name):
+        self.name = name
+        self.state = 'run'
+
+    @server.rpc()
+    def stop(self):
+        self.state = 'stop'
+
+    @server.rpc()
+    def start(self):
+        self.state = 'run'
+
+    def hidden(self):
+        return 'Not exposed over RPC'
+
+```
+
+## accessing a collection
+
+```
+job = client.create(s.Job.create(name="helium"))
+
+for j in client.list(s.Job):
+    client.call(j.stop())
+
+job = client.get(s.Job["helium"])
+client.delete(job)
+```
 
