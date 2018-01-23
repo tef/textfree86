@@ -395,6 +395,12 @@ class Collection:
 
 class Model:
     class PeeweeHandler(Collection.Handler):
+        def extract_attributes(self, obj):
+            attr = OrderedDict()
+            for name in self.cls._meta.fields:
+                attr[name] = getattr(obj, name)
+            return attr
+
         def key_for(self, obj):
             name = self.cls._meta.primary_key.name
             return getattr(obj, name)
