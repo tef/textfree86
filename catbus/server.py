@@ -288,14 +288,14 @@ class Collection:
                 
                 if not obj_method:
                     if method == 'GET':
-                        return self.lookup(name)
+                        return self.lookup(id)
                     elif method == 'DELETE':
-                        self.delete(path)
+                        self.delete(id)
                         return None
                     else:
                         raise MethodNotAllowed()
                 else:
-                    obj = self.lookup(name)
+                    obj = self.lookup(id)
                     if method == 'GET':
                         return getattr(obj, obj_method)()
                     elif method == 'POST':
@@ -343,7 +343,7 @@ class Collection:
 
             url = self.url_for(prefix, o)
 
-            links, methods = self.extract_methods(o)
+            links, methods = self.extract_methods(self.cls)
 
             attributes = self.extract_attributes(o)
 

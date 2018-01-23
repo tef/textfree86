@@ -7,21 +7,28 @@ from peewee import *
 
 db = SqliteDatabase('people.db')
 
-class Person(Model):
-    name = CharField()
+class Models:
+    class Person(Model):
+        name = CharField()
 
-    class Meta:
-        database = db
+        @server.rpc()
+        def hello(self):
+            return "Hello, {}!".format(self.name)
+
+        class Meta:
+            database = db
+
 
 db.connect()
-db.create_tables([Person], safe=True)
+db.create_tables([Models.Person], safe=True)
 
 
 
 def make_server():
     n = server.Namespace()
 
-    n.register(Person, server.Model.PeeweeHandler)
+    n.register(Models.Person, server.Model.PeeweeHandler)
+
 
     return server.Server(n.app(), port=8888)
 
@@ -43,7 +50,8 @@ def test():
         print('Listing...')
 
         for j in client.list(s.Person):
-            print(" Person", j.name)
+            print(" Person", j.name, j.methods)
+            print(client.call(j.hello()))
 
         print('Deleting...')
         client.delete(person)
