@@ -4,7 +4,7 @@ import collections
 from datetime import datetime, timezone
 
 def make_server():
-    n = server.Namespace(prefix="/test/")
+    n = server.Namespace(name="test")
     @n.add()
     def echo(x):
         return x

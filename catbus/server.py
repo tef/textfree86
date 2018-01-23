@@ -350,11 +350,14 @@ class Collection:
             raise Exception('unimplemented')
 
 class Namespace:
-    def __init__(self, prefix="/"):
+    def __init__(self, name=""):
         self.handlers = OrderedDict()
         self.paths = OrderedDict()
         self.service = None
-        if prefix[-1] != '/': prefix += "/"
+        if name:
+            prefix="/{}/".format(name)
+        else:
+            prefix="/"
         self.prefix=prefix
 
     def add(self, name=None):
