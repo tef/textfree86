@@ -73,9 +73,9 @@ class RequestHandler:
     pass
     
 class FunctionHandler(RequestHandler):
-    def __init__(self, url, function):
+    def __init__(self, name, function):
         self.fn = function
-        self.url = url
+        self.name = name
 
     def on_request(self, method, path, params, data):
         if method == 'GET':
@@ -84,14 +84,17 @@ class FunctionHandler(RequestHandler):
             return self.fn(**data)
         raise MethodNotAllowed()
 
-    def link(self):
-        if getattr(self.fn, 'safe', False):
-            return objects.Link(self.url)
-        else:
-            return objects.Form(self.url, arguments=funcargs(self.fn))
+    def url(self, prefix):
+        return prefix+self.name
 
-    def embed(self, o=None):
-        return self.link()
+    def link(self, prefix):
+        if getattr(self.fn, 'safe', False):
+            return objects.Link(self.url(prefix))
+        else:
+            return objects.Form(self.url(prefix), arguments=funcargs(self.fn))
+
+    def embed(self, prefix, o=None):
+        return self.link(prefix)
 
 
 class Service:
@@ -106,12 +109,12 @@ class Service:
         return getattr(object.__getattribute__(self, '__class__'),name)
 
     class Handler(RequestHandler):
-        def __init__(self, url, service):
+        def __init__(self, name, service):
             self.service = service
-            self.url = url
+            self.name = name
 
         def on_request(self, method, path, params, data):
-            path = path[len(self.url)+1:]
+            path = path[len(self.name)+1:]
             if path.startswith('_'): 
                 raise Forbidden()
             if method == 'GET':
@@ -123,23 +126,26 @@ class Service:
             else:
                 raise MethodNotAllowed()
 
-        def link(self):
-            return objects.Link(self.url)
+        def url(self, prefix):
+            return prefix+self.name
 
-        def embed(self,o=None):
+        def link(self, prefix):
+            return objects.Link(self.url(prefix))
+
+        def embed(self,prefix, o=None):
             if o is None or o is self.service:
-                return self.link()
-            return make_resource(o, self.url)
+                return self.link(prefix)
+            return make_resource(o, self.url(prefix))
 
 class Token:
     rpc = True
     class Handler(RequestHandler):
-        def __init__(self, url, view):
+        def __init__(self, name, view):
             self.view = view
-            self.url = url
+            self.name = name
 
         def on_request(self, method, path, params, data):
-            path = path[len(self.url)+1:]
+            path = path[len(self.name)+1:]
             if path.startswith('_'): 
                 raise Forbidden()
 
@@ -163,7 +169,7 @@ class Token:
                 if method == 'POST':
                     return self.view(**data)
                 elif method == 'GET':
-                    return self.link()
+                    return self.view
                 raise MethodNotAllowed()
 
         def lookup(self, params):
@@ -171,15 +177,18 @@ class Token:
             obj = self.view(**params)
             return obj
 
-        def link(self):
-            args = funcargs(self.view.__init__)
-            return objects.Form(self.url, arguments=args)
+        def url(self, prefix):
+            return prefix + self.name
 
-        def embed(self,o=None):
+        def link(self, prefix):
+            args = funcargs(self.view.__init__)
+            return objects.Form(self.url(prefix), arguments=args)
+
+        def embed(self, prefix, o=None):
             if o is None or o is self.view:
-                return self.link()
+                return self.link(prefix)
             params = {key: objects.dump(value) for key, value in o.__dict__.items()}
-            url = "{}?{}".format(self.url, urlencode(params))
+            url = "{}?{}".format(self.url(prefix), urlencode(params))
 
             return make_resource(o, url)
 
@@ -190,13 +199,13 @@ class Singleton:
         pass
 
     class Handler(RequestHandler):
-        def __init__(self, url, cls):
+        def __init__(self, name, cls):
             self.cls = cls
-            self.url = url
+            self.name = name
             self.obj = self.cls()
 
         def on_request(self, method, path, params, data):
-            path = path[len(self.url)+1:]
+            path = path[len(self.name)+1:]
             if path.startswith('_'): 
                 raise Forbidden()
             if method == 'GET':
@@ -212,13 +221,16 @@ class Singleton:
             else:
                 raise MethodNotAllowed()
 
-        def link(self):
-            return objects.Link(self.url)
+        def url(self, prefix):
+            return prefix + self.name
 
-        def embed(self,o=None):
+        def link(self, prefix):
+            return objects.Link(self.url(prefix))
+
+        def embed(self,prefix, o):
             if o is None or o is self.cls:
-                return self.link()
-            return make_resource(o, self.url)
+                return self.link(prefix)
+            return make_resource(o, self.url(prefix))
 
 class Collection:
     def dict_handler(name, d=None):
@@ -249,12 +261,12 @@ class Collection:
         return Handler
 
     class Handler(RequestHandler):
-        def __init__(self, url, cls):
+        def __init__(self, name, cls):
             self.cls = cls
-            self.url = url
+            self.name = name
 
         def on_request(self, method, path, params, data):
-            col_method, path = path[len(self.url)+1:], None
+            col_method, path = path[len(self.name)+1:], None
 
             if '/' in col_method:
                 col_method, path = col_method.split('/',1)
@@ -302,29 +314,31 @@ class Collection:
             elif col_method == '':
                 if method != 'GET':
                     raise MethodNotAllowed()
-                return self.link()
+                return self.cls
 
             raise NotImplelmented(method)
 
+        def url(self, prefix):
+            return prefix+self.name
 
-        def link(self):
+        def link(self, prefix):
             return objects.Collection(
                     kind=self.cls.__name__,
-                    url=self.url, 
+                    url=self.url(prefix), 
                     arguments=funcargs(self.cls.__init__))
 
-        def embed(self,o=None):
+        def embed(self, prefix, o=None):
             if o is None or o is self.cls:
-                return self.link()
+                return self.link(prefix)
             meta = OrderedDict(
                     id = self.key_for(o),
-                    collection = self.url
+                    collection = self.url(prefix)
             )
-            url = self.url_for(o)
+            url = self.url_for(prefix, o)
             return make_resource(o, url, metadata=meta)
 
-        def url_for(self, o):
-            return "{}/id/{}".format(self.url,self.key_for(o))
+        def url_for(self, prefix, o):
+            return "{}{}/id/{}".format(prefix,self.name,self.key_for(o))
 
         # override
 
@@ -371,7 +385,7 @@ class Namespace:
 
     def add_handler(self, name, handler, obj):
         n = obj.__name__ if name is None else name
-        self.handlers[n] = handler(self.prefix+n, obj)
+        self.handlers[n] = handler(n, obj)
         self.paths[obj]=n
         self.service = None
 
@@ -379,7 +393,7 @@ class Namespace:
         if self.service is None:
             attrs = OrderedDict()
             for name,o in self.handlers.items():
-                attrs[name] = o.link()
+                attrs[name] = o.link(prefix=self.prefix)
             self.service = objects.Resource('Index',
                 metadata={'url':self.prefix},
                 attributes=attrs,
@@ -392,7 +406,8 @@ class Namespace:
             out = self.index()
         elif path:
             p = len(self.prefix)
-            name = path[p:].split('/',1)[0].split('.',1)[0]
+            path = path[p:]
+            name = path.split('/',1)[0].split('.',1)[0]
             if name in self.handlers:
                 data  = request.data.decode('utf-8')
                 if data:
@@ -409,9 +424,9 @@ class Namespace:
         def transform(o):
             if isinstance(o, type) or isinstance(o, types.FunctionType):
                 if o in self.paths:
-                    return self.handlers[self.paths[o]].embed(o)
+                    return self.handlers[self.paths[o]].embed(self.prefix, o)
             elif o.__class__ in self.paths:
-                return self.handlers[self.paths[o.__class__]].embed(o)
+                return self.handlers[self.paths[o.__class__]].embed(self.prefix, o)
             return o
 
         if out is None:
