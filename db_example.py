@@ -8,59 +8,53 @@ from peewee import *
 
 db = SqliteDatabase('people.db')
 
-class Models:
-    class Person(Model):
-        uuid = UUIDField(primary_key=True, default=uuid.uuid4)
-        name = CharField()
+namespace = server.Namespace()
 
-        @server.rpc()
-        def hello(self):
-            return "Hello, {}!".format(self.name)
+@namespace.add()
+class Person(Model):
+    class Meta: database = db
 
-        class Meta:
-            database = db
+    uuid = UUIDField(primary_key=True, default=uuid.uuid4)
+    name = CharField()
 
+    Handler = server.Model.PeeweeHandler
 
-db.connect()
-db.create_tables([Models.Person], safe=True)
+    @server.rpc()
+    def hello(self):
+        return "Hello, {}!".format(self.name)
 
-
-
-def make_server():
-    n = server.Namespace()
-
-    n.register(Models.Person, server.Model.PeeweeHandler)
-
-
-    return server.Server(n.app(), port=8888)
 
 def test():
-    server_thread = make_server()
+    db.connect()
+    db.create_tables([Person], safe=True)
+
+    server_thread = server.Server(namespace.app(), port=8888)
     server_thread.start()
 
     print("Running on ",server_thread.url)
 
     try:
-        s= client.get(server_thread.url)
-
-        print('Creating...')
-        person = client.create(s.Person,dict(name="butt"))
-
-        print('Created',person)
-
-        print('Listing...')
-
-        for p in client.list(s.Person):
-            print(" Person", p)
-            print(" Calling p.hello()", client.call(p.hello()))
-
-        print('Deleting...')
-        client.delete(person)
-        print('Deleted')
+        test_client(server_thread.url)
     finally:
         server_thread.stop()
 
 
+def test_client(url):
+    s= client.get(url)
 
+    print('Creating...')
+    person = client.create(s.Person,dict(name="butt"))
+
+    print('Created',person)
+
+    print('Listing...')
+
+    for p in client.list(s.Person):
+        print(" Person", p)
+        print(" Calling p.hello()", client.call(p.hello()))
+
+    print('Deleting...')
+    client.delete(person)
+    print('Deleted')
 if __name__ == '__main__':
     test()
