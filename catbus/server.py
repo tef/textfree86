@@ -26,14 +26,29 @@ def funcargs(m):
     if args and args[0] == 'self': args.pop(0)
     return args
 
-def make_resource(obj, url, metadata=None):
+def make_resource(obj, url):
     cls = obj.__class__
-    attributes = OrderedDict()
-    methods = OrderedDict()
+
+    links, methods = extract_methods(cls)
+    attributes = extract_attributes(obj)
+
+    metadata = OrderedDict(
+        url = url,
+        links = links,
+        methods = methods,
+    )
+
+    return objects.Resource(
+        kind = cls.__name__,
+        metadata = metadata,
+        attributes = attributes,
+    )
+
+def extract_methods(cls):
     links = []
     all_methods = getattr(cls, 'rpc', False)
-
-    for k,v in obj.__class__.__dict__.items():
+    methods = OrderedDict()
+    for k,v in cls.__dict__.items():
         if not getattr(v, 'rpc', all_methods): continue
         if k.startswith('_'): continue
 
@@ -41,25 +56,16 @@ def make_resource(obj, url, metadata=None):
             links.append(k)
         else:
             methods[k] = funcargs(v)
+    return links, methods
 
+def extract_attributes(obj):
+    attributes = OrderedDict()
     for k,v in obj.__dict__.items():
         if k.startswith('_'): continue
         
         attributes[k]= v
+    return attributes
 
-    meta = OrderedDict(
-        url = url,
-        links = links,
-        methods = methods,
-    )
-    if metadata:
-        meta.update(metadata)
-
-    return objects.Resource(
-        kind = cls.__name__,
-        metadata = meta,
-        attributes = attributes,
-    )
 
 
 def rpc(safe=False):
@@ -334,12 +340,32 @@ class Collection:
         def embed(self, prefix, o=None):
             if o is None or o is self.cls:
                 return self.link(prefix)
-            meta = OrderedDict(
-                    id = self.key_for(o),
-                    collection = self.url(prefix)
-            )
+
             url = self.url_for(prefix, o)
-            return make_resource(o, url, metadata=meta)
+
+            links, methods = self.extract_methods(o)
+
+            attributes = self.extract_attributes(o)
+
+            metadata = OrderedDict(
+                id = self.key_for(o),
+                collection = self.url(prefix),
+                url = url,
+                links = links,
+                methods = methods,
+            )
+
+            return objects.Resource(
+                kind = self.cls.__name__,
+                metadata = metadata,
+                attributes = attributes,
+            )
+
+        def extract_methods(self, obj):
+            return extract_methods(obj)
+
+        def extract_attributes(self, obj):
+            return extract_attributes(obj)
 
         def url_for(self, prefix, o):
             return "{}{}/id/{}".format(prefix,self.name,self.key_for(o))
@@ -396,7 +422,8 @@ class Namespace:
             prefix="/"
         self.prefix=prefix
 
-    def register(self,obj):
+    def register(self,obj, handler):
+        obj.Handler = handler
         return self.add()(obj)
 
     def add(self, name=None):

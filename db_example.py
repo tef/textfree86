@@ -13,16 +13,15 @@ class Person(Model):
     class Meta:
         database = db
 
-    class Handler(server.Model.PeeweeHandler):
-        pass
-
 db.connect()
 db.create_tables([Person], safe=True)
+
+
 
 def make_server():
     n = server.Namespace()
 
-    n.register(Person)
+    n.register(Person, server.Model.PeeweeHandler)
 
     return server.Server(n.app(), port=8888)
 
@@ -35,15 +34,20 @@ def test():
     try:
         s= client.get(server_thread.url)
 
+        print('Creating...')
         person = client.create(s.Person,dict(name="butt"))
             # client.call(s.Job.create(...))
 
-        print(person, person.url, person.methods, person.attributes)
+        print('Created',person)
+
+        print('Listing...')
 
         for j in client.list(s.Person):
-            print(j)
+            print(" Person", j.attributes)
 
-        print(client.delete(person))
+        print('Deleting...')
+        client.delete(person)
+        print('Deleted')
     finally:
         server_thread.stop()
 
