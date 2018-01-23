@@ -9,6 +9,7 @@ import socket
 import traceback
 import sys
 import inspect
+import uuid
 
 from collections import OrderedDict
 from urllib.parse import urljoin, urlencode
@@ -398,12 +399,18 @@ class Model:
         def extract_attributes(self, obj):
             attr = OrderedDict()
             for name in self.cls._meta.fields:
-                attr[name] = getattr(obj, name)
+                a = getattr(obj, name)
+                if isinstance(a, uuid.UUID):
+                    a = a.hex
+                attr[name] = a
             return attr
 
         def key_for(self, obj):
             name = self.cls._meta.primary_key.name
-            return getattr(obj, name)
+            attr = getattr(obj, name)
+            if isinstance(attr, uuid.UUID):
+                attr = attr.hex
+            return attr
 
         def lookup(self, name):
             return self.cls.get(self.cls._meta.primary_key == name)

@@ -1,6 +1,7 @@
 from catbus import client, server
 
 import collections
+import uuid
 from datetime import datetime, timezone
 
 from peewee import *
@@ -9,6 +10,7 @@ db = SqliteDatabase('people.db')
 
 class Models:
     class Person(Model):
+        uuid = UUIDField(primary_key=True, default=uuid.uuid4)
         name = CharField()
 
         @server.rpc()
@@ -43,7 +45,6 @@ def test():
 
         print('Creating...')
         person = client.create(s.Person,dict(name="butt"))
-            # client.call(s.Job.create(...))
 
         print('Created',person)
 
