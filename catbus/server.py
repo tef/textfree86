@@ -252,7 +252,7 @@ class Collection:
                 return j
 
             def delete(self, name):
-                return self.items.pop(name)
+                self.items.pop(name)
 
             def list(self, selector, limit, next):
                 return list(self.items.values())
@@ -284,7 +284,8 @@ class Collection:
                     if method == 'GET':
                         return self.lookup(name)
                     elif method == 'DELETE':
-                        return self.delete(path)
+                        self.delete(path)
+                        return None
                     else:
                         raise MethodNotAllowed()
                 else:
@@ -325,7 +326,10 @@ class Collection:
             return objects.Collection(
                     kind=self.cls.__name__,
                     url=self.url(prefix), 
-                    arguments=funcargs(self.cls.__init__))
+                    arguments=self.create_args())
+                    
+        def create_args(self):
+            return funcargs(self.cls.__init__)
 
         def embed(self, prefix, o=None):
             if o is None or o is self.cls:
@@ -363,6 +367,24 @@ class Collection:
         def watch(self, selector):
             raise Exception('unimplemented')
 
+class Model:
+    class PeeweeHandler(Collection.Handler):
+        def key_for(self, obj):
+            name = self.cls._meta.primary_key.name
+            return getattr(obj, name)
+
+        def lookup(self, name):
+            return self.cls.get(self.cls._meta.primary_key == name)
+
+        def create(self, data):
+            return self.cls.create(**data)
+
+        def delete(self, name):
+            self.cls.delete().where(self.cls._meta.primary_key == name).execute()
+
+        def list(self, selector, limit, next):
+            return list(self.cls.select())
+
 class Namespace:
     def __init__(self, name=""):
         self.handlers = OrderedDict()
@@ -373,6 +395,9 @@ class Namespace:
         else:
             prefix="/"
         self.prefix=prefix
+
+    def register(self,obj):
+        return self.add()(obj)
 
     def add(self, name=None):
         def _add(obj):
