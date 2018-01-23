@@ -43,7 +43,7 @@ def test():
         print('Listing...')
 
         for j in client.list(s.Person):
-            print(" Person", j.attributes)
+            print(" Person", j.name)
 
         print('Deleting...')
         client.delete(person)
