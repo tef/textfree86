@@ -49,9 +49,9 @@ def test():
 
         print('Listing...')
 
-        for j in client.list(s.Person):
-            print(" Person", j.name, j.methods)
-            print(client.call(j.hello()))
+        for p in client.list(s.Person):
+            print(" Person", p)
+            print(" Calling p.hello()", client.call(p.hello()))
 
         print('Deleting...')
         client.delete(person)
