@@ -162,7 +162,7 @@ class Client:
             if isinstance(obj, objects.Form):
                 return RemoteFunction('POST', url, obj.arguments)
             if isinstance(obj, objects.Collection):
-                return RemoteCollection(obj.kind, url, obj.arguments)
+                return RemoteCollection(obj.kind, url, obj)
             if isinstance(obj, objects.Resource):
                 return RemoteObject(obj.kind, url, obj)
 
@@ -199,10 +199,10 @@ class RemoteFunction:
         return objects.Request('POST', self.url, {}, {}, data)
 
 class RemoteCollection:
-    def __init__(self, kind,  url, arguments, selectors=()):
+    def __init__(self, kind, url, obj, selectors=()):
         self.kind = kind
         self.url = url
-        self.arguments = arguments
+        self.obj = obj
         self.selectors = selectors
 
     def __str__(self):
@@ -220,8 +220,9 @@ class RemoteCollection:
     
     def create(self, *args, **kwargs):
         url = "{}/new".format(self.url)
+        arguments = self.obj.metadata['create']
         data = OrderedDict()
-        for key, value in zip(self.arguments, args):
+        for key, value in zip(arguments, args):
             data[key] = value
             if key in kwargs:
                 raise Exception('invalid')
@@ -267,7 +268,7 @@ class RemoteCollection:
                 values=value,
             ))
 
-        return RemoteCollection(self.kind, self.url, self.arguments, new_selectors)
+        return RemoteCollection(self.kind, self.url, self.obj, new_selectors)
 
     def not_where(self, **kwargs):
         new_selectors = list(self.selectors)
@@ -279,7 +280,7 @@ class RemoteCollection:
                 values=value
         ))
         
-        return RemoteCollection(self.kind, self.url, self.arguments, new_selectors)
+        return RemoteCollection(self.kind, self.url, self.obj, new_selectors)
 
 
 class RemoteList:

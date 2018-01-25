@@ -85,24 +85,21 @@ class Form(Hyperlink):
 
 @registry.add()
 class Collection(Hyperlink):
-    def __init__(self, kind, url, arguments, axis):
+    def __init__(self, kind, metadata):
         self.kind = kind
-        self.url = url
-        self.arguments = arguments
-        self.axis = axis
+        self.metadata = metadata
+
+    @property
+    def url(self):
+        return self.metadata['url']
+
 
 @registry.add()
 class List(Hyperlink):
     def __init__(self, kind, metadata, items):
         self.kind = kind
         self.items = items
-
         self.metadata = OrderedDict(metadata)
-
-    @property
-    def url(self):
-        return self.metadata['url']
-
 
 @registry.add()
 class Resource(Hyperlink):

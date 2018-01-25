@@ -53,6 +53,8 @@ def test_client(url):
         print(" Person", p)
         print(" Calling p.hello()", client.call(p.hello()))
         total += 1
+        if p.uuid != person.uuid:
+            print(client.delete(p))
 
     print('Total', total)
     print('Deleting...')

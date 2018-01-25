@@ -355,11 +355,14 @@ class Collection:
             return prefix+self.name
 
         def link(self, prefix):
+            metadata = OrderedDict(
+                url = self.url(prefix),
+                create=self.create_args(),
+                select=self.selector_args(),
+            )
             return objects.Collection(
                 kind=self.cls.__name__,
-                url=self.url(prefix), 
-                arguments=self.create_args(),
-                axis=self.selector_args(),
+                metadata = metadata
             )
                     
         def create_args(self):
@@ -428,13 +431,14 @@ class Model:
     class PeeweeHandler(Collection.Handler):
         def __init__(self, name, cls):
             self.pk = cls._meta.primary_key
-            self.fields = list(k for k,v in cls._meta.fields.items() if not v.primary_key)
+            self.create_fields = list(k for k,v in cls._meta.fields.items() if not v.primary_key)
+            self.fields = list(k for k,v in cls._meta.fields.items())
             self.indexes = [self.pk.name]
-            self.indexes.extend(k for k,v in cls._meta.fields.items() if v.index or v.unique)
+            self.indexes.extend(k for k,v in cls._meta.fields.items() if v.index or v.unique) 
             Collection.Handler.__init__(self, name, cls)
 
         def create_args(self):
-            return self.fields
+            return self.create_fields
 
         def selector_args(self):
             return self.indexes
