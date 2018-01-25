@@ -340,7 +340,9 @@ class Collection:
                     selector = params['where']
                     selector = objects.parse_selector(selector)
                     self.delete_list(selector)
-                raise MethodNotAllowed()
+                    return
+                else:
+                    raise MethodNotAllowed()
             elif col_method == 'new':
                 if method != 'POST':
                     raise MethodNotAllowed()
@@ -426,7 +428,6 @@ class Collection:
 
         def delete_list(self, selector):
             raise Exception('unimplemented')
-            pass
 
         def list(self, selector, limit, next):
             raise Exception('unimplemented')
@@ -476,6 +477,9 @@ class Model:
 
         def delete(self, name):
             self.cls.delete().where(self.pk == name).execute()
+
+        def delete_list(self, selector):
+            self.select_on(self.cls.delete(), selector).execute()
 
         def select_on(self, items, selector):
             for s in selector:
