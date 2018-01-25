@@ -6,6 +6,9 @@ RemoteObject/RemoteFunction wrapper objects.
 
 """
 
+# warning: defines a function called list
+_list = list
+
 from functools import singledispatch
 from urllib.parse import urljoin
 from collections import OrderedDict
@@ -97,7 +100,7 @@ class Client:
     
     def list(self, request, batch=None):
         if isinstance(request, RemoteDataset):
-            request = request.list(batch)
+            request = request.list(batch=batch)
         elif instance(obj, objects.Request):
             pass
         else:
@@ -233,24 +236,26 @@ class RemoteDataset:
         url = "{}/id/{}".format(self.url, name)
         return objects.Request('DELETE', url, {}, {}, None)
 
-    def get_params(self,batch):
+    def get_params(self, selector, batch):
         params = OrderedDict()
-        if not self.selectors: 
-            params['selector'] = '*'
-        else:
-            raise Exception('nope')
+        if selector and self.selectors:
+            raise Exception('no')
+        if selector:
+            params['where'] = selector
+        if self.selectors: 
+            params['where'] = objects.dump_selector(self.selectors)
         if batch:
             params['limit'] = batch
         return params
 
-    def delete_list(self, batch=None):
+    def delete_list(self, where=None):
         url = "{}/delete".format(self.url)
-        params = self.get_params(batch)
+        params = self.get_params(where, None)
         return objects.Request('POST', url, params, {}, None)
 
-    def list(self, batch=None):
+    def list(self, where=None, batch=None):
         url = "{}/list".format(self.url)
-        params = self.get_params(batch)
+        params = self.get_params(where, batch)
         return objects.Request('GET', url, params, {}, None)
 
     def next(self, batch=None):
@@ -259,10 +264,11 @@ class RemoteDataset:
         return self.list(batch)
 
     def where(self, **kwargs):
-        new_selectors = list(self.selectors)
+        new_selectors = []
+        new_selectors.extend(self.selectors)
         names = self.obj.metadata['list']
         
-        for name, value in kwargs:
+        for name, value in kwargs.items():
             if name not in names:
                 raise Exception('no')
             new_selectors.append(OrderedDict(
@@ -274,10 +280,11 @@ class RemoteDataset:
         return RemoteDataset(self.kind, self.url, self.obj, new_selectors)
 
     def not_where(self, **kwargs):
-        new_selectors = list(self.selectors)
+        new_selectors = []
+        new_selectors.extend(self.selectors)
         names = self.obj.metadata['list']
 
-        for name, value in kwargs:
+        for name, value in kwargs.items():
             if name not in names:
                 raise Exception('no')
             new_selectors.append(OrderedDict(
@@ -359,6 +366,6 @@ def call(arg, method=None, data=None):
 def delete(req, arg=None):
     return client.delete(req, arg)
 def list(arg, batch=None):
-    return client.list(arg, batch)
+    return client.list(arg, batch=batch)
 def create(arg, data):
     return client.create(arg, data)

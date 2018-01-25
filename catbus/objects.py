@@ -93,7 +93,6 @@ class Dataset(Hyperlink):
     def url(self):
         return self.metadata['url']
 
-
 @registry.add()
 class List(Hyperlink):
     def __init__(self, kind, metadata, items):
@@ -142,3 +141,30 @@ def parse(obj, transform=None):
 def dump(obj, transform=None):
     return registry.dump(obj, transform)
 
+
+def parse_selector(string):
+    output = []
+    if string == "*":
+        return None
+
+    for piece in string.split(","):
+        key, operator, values = piece.strip().split()
+        operator = {
+                '==':'Equals',
+                '!=':'NotEquals',
+        }[operator]
+        output.append(dict(key=key, operator=operator, values=values))
+    return output
+
+def dump_selector(selectors):
+    output = []
+
+    for s in selectors:
+        key, operator, values = s['key'], s['operator'], s['values']
+        operator = {
+                'Equals':'==',
+                'NotEquals':'!=',
+        }[operator]
+        output.append("{} {} {}".format(key, operator, values))
+
+    return ",".join(output)

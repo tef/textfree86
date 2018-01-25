@@ -16,6 +16,7 @@ class Person(Model):
 
     uuid = UUIDField(primary_key=True, default=uuid.uuid4)
     name = CharField(index=True)
+    job = CharField(index=True)
 
     Handler = server.Model.PeeweeHandler
 
@@ -42,23 +43,43 @@ def test_client(url):
     s= client.get(url)
 
     print('Creating...')
-    person = client.create(s.Person,dict(name="butt"))
+    people = []
+    for name in ('Dave', 'Eve', 'Sam'):
+        person = client.create(s.Person,dict(name=name, job="bar"))
+        people.append(person)
 
-    print('Created',person)
+    for name in ('Mar', 'Jet', 'Pol'):
+        person = client.create(s.Person,dict(name=name, job="foo"))
+        people.append(person)
+
+    print()
 
     print('Listing...')
 
     total = 0
     for p in client.list(s.Person, batch=3):
+        print(" Person", p.name)
+        print(" Calling p.hello()", client.call(p.hello()))
+        total += 1
+
+    print('Total', total)
+    print()
+
+
+
+    print('Listing...')
+
+    total = 0
+    for p in client.list(s.Person.where(job='foo')):
         print(" Person", p)
         print(" Calling p.hello()", client.call(p.hello()))
         total += 1
-        if p.uuid != person.uuid:
-            print(client.delete(p))
 
     print('Total', total)
+    print()
     print('Deleting...')
-    client.delete(person)
+    for person in people:
+        client.delete(person)
     print('Deleted')
 if __name__ == '__main__':
     test()

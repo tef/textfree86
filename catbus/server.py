@@ -330,11 +330,12 @@ class Collection:
             elif col_method =='list':
                 if method != 'GET':
                     raise MethodNotAllowed()
-                selector = params['selector']
+                selector = params.get('where','*')
                 limit = params.get('limit')
                 next = params.get('continue')
                 if limit:
                     limit = int(limit)
+                selector = objects.parse_selector(selector)
                 return self.list(selector, limit, next)
             elif col_method == 'new':
                 if method != 'POST':
@@ -358,7 +359,7 @@ class Collection:
             metadata = OrderedDict(
                 url = self.url(prefix),
                 new=self.create_args(),
-                select=self.selector_args(),
+                list=self.selector_args(),
                 key=self.key
             )
             return objects.Dataset(
