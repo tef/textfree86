@@ -356,12 +356,17 @@ class Collection:
 
         def link(self, prefix):
             return objects.Collection(
-                    kind=self.cls.__name__,
-                    url=self.url(prefix), 
-                    arguments=self.create_args())
+                kind=self.cls.__name__,
+                url=self.url(prefix), 
+                arguments=self.create_args(),
+                axis=self.selector_args(),
+            )
                     
         def create_args(self):
             return funcargs(self.cls.__init__)
+
+        def selector_args(self):
+            return ()
 
         def embed(self, prefix, o=None):
             if o is None or o is self.cls:
@@ -429,8 +434,10 @@ class Model:
             Collection.Handler.__init__(self, name, cls)
 
         def create_args(self):
-            print(self.indexes)
             return self.fields
+
+        def selector_args(self):
+            return self.indexes
 
         def extract_attributes(self, obj):
             attr = OrderedDict()
