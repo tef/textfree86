@@ -15,14 +15,13 @@ class Person(Model):
     class Meta: database = db
 
     uuid = UUIDField(primary_key=True, default=uuid.uuid4)
-    name = CharField()
+    name = CharField(index=True)
 
     Handler = server.Model.PeeweeHandler
 
     @server.rpc()
     def hello(self):
         return "Hello, {}!".format(self.name)
-
 
 def test():
     db.connect()
@@ -50,7 +49,7 @@ def test_client(url):
     print('Listing...')
 
     total = 0
-    for p in client.list(s.Person, batch=1):
+    for p in client.list(s.Person, batch=3):
         print(" Person", p)
         print(" Calling p.hello()", client.call(p.hello()))
         total += 1

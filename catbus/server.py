@@ -421,12 +421,20 @@ class Collection:
 
 class Model:
     class PeeweeHandler(Collection.Handler):
-        def pk(self):
-            return self.cls._meta.primary_key
+        def __init__(self, name, cls):
+            self.pk = cls._meta.primary_key
+            self.fields = list(k for k,v in cls._meta.fields.items() if not v.primary_key)
+            self.indexes = [self.pk.name]
+            self.indexes.extend(k for k,v in cls._meta.fields.items() if v.index or v.unique)
+            Collection.Handler.__init__(self, name, cls)
+
+        def create_args(self):
+            print(self.indexes)
+            return self.fields
 
         def extract_attributes(self, obj):
             attr = OrderedDict()
-            for name in self.cls._meta.fields:
+            for name in self.fields:
                 a = getattr(obj, name)
                 if isinstance(a, uuid.UUID):
                     a = a.hex
@@ -434,24 +442,24 @@ class Model:
             return attr
 
         def key_for(self, obj):
-            name = self.pk().name
+            name = self.pk.name
             attr = getattr(obj, name)
             if isinstance(attr, uuid.UUID):
                 attr = attr.hex
             return attr
 
         def lookup(self, name):
-            return self.cls.get(self.pk() == name)
+            return self.cls.get(self.pk == name)
 
         def create(self, data):
             return self.cls.create(**data)
 
         def delete(self, name):
-            self.cls.delete().where(self.pk() == name).execute()
+            self.cls.delete().where(self.pk == name).execute()
 
         def list(self, selector, limit, next):
             items = self.cls.select()
-            pk = self.pk()
+            pk = self.pk
             next_token = None
 
             if limit or next:
