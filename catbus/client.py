@@ -106,7 +106,14 @@ class Client:
         # while ... keep returning them
         obj = self.fetch(request)
         if isinstance(obj, RemoteList):
-            raise Exception('not yet')
+            while obj:
+                for x in obj.values():
+                    yield x
+                request = obj.next()
+                if request:
+                    obj = self.fetch(request)
+                else:
+                    obj = None
         else:
             for x in obj:
                 yield x
@@ -143,6 +150,9 @@ class Client:
             if not isinstance(obj, objects.Hyperlink):
                 return obj
 
+            if isinstance(obj, objects.List):
+                return RemoteList(obj.kind, result.url, obj)
+
             url = urljoin(result.url, obj.url)
 
             if isinstance(obj, objects.Link):
@@ -155,8 +165,6 @@ class Client:
                 return RemoteCollection(obj.kind, url, obj.arguments)
             if isinstance(obj, objects.Resource):
                 return RemoteObject(obj.kind, url, obj)
-            if isinstance(obj, objects.List):
-                return RemoteList(obj.kind, url, obj)
 
             return obj
 
@@ -275,18 +283,22 @@ class RemoteCollection:
 
 
 class RemoteList:
-    def __init__(self,kind, url, obj):
+    def __init__(self,kind, base_url, obj):
+        self.base_url = base_url
         self.kind = kind
-        self.url = url
         self.obj = obj
 
     def next(self):
-        params = OrderedDict()
+        if self.obj.metadata['next']:
+            params = OrderedDict()
+            url = urljoin(self.base_url, self.obj.metadata['collection'])
+            url = "{}/list".format(url)
 
-        return object.Request('GET', self.url, params, {}, None)
+            raise Exception('unimplemented')
+            return object.Request('GET', self.url, params, {}, None)
 
     def values(self):
-        return self.obj['items']
+        return self.obj.items
 
     # __getitem__
     # length

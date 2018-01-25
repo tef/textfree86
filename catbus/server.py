@@ -240,6 +240,23 @@ class Singleton:
             return make_resource(o, self.url(prefix))
 
 class Collection:
+    class List:
+        def __init__(self, name, items, selector, next):
+            self.name = name
+            self.items = items
+            self.selector = selector
+            self.next = next
+
+        def embed(self, prefix):
+            return objects.List(
+                kind = self.name,
+                items = self.items,
+                metadata = OrderedDict(
+                    collection = "{}{}".format(prefix, self.name),
+                    selector = self.selector,
+                    next = self.next
+                )
+            )
     def dict_handler(name, d=None):
         if d is None:
             d = OrderedDict()
@@ -262,7 +279,12 @@ class Collection:
                 self.items.pop(name)
 
             def list(self, selector, limit, next):
-                return list(self.items.values())
+                return Collection.List(
+                    name=self.name, 
+                    items=list(self.items.values()),
+                    selector=selector,
+                    next=None,
+                )
 
 
         return Handler
@@ -422,7 +444,12 @@ class Model:
             self.cls.delete().where(self.cls._meta.primary_key == name).execute()
 
         def list(self, selector, limit, next):
-            return list(self.cls.select())
+            return Collection.List(
+                name=self.name, 
+                items=list(self.cls.select()),
+                selector=selector,
+                next=None
+            )
 
 class Namespace:
     def __init__(self, name=""):
@@ -492,6 +519,8 @@ class Namespace:
                     return self.handlers[self.paths[o]].embed(self.prefix, o)
             elif o.__class__ in self.paths:
                 return self.handlers[self.paths[o.__class__]].embed(self.prefix, o)
+            elif isinstance(o, Collection.List):
+                return o.embed(self.prefix)
             return o
 
         if out is None:
