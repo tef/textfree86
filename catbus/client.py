@@ -98,9 +98,20 @@ class Client:
         return self.fetch(request)
 
     
-    def list(self, request, batch=None):
+    def delete_list(self, request, where=None):
         if isinstance(request, RemoteDataset):
-            request = request.list(batch=batch)
+            request = request.delete_list(where=where)
+        elif instance(obj, objects.Request):
+            pass
+        else:
+            raise Exception('no')
+
+        return self.fetch(request)
+
+    
+    def list(self, request, where=None, batch=None):
+        if isinstance(request, RemoteDataset):
+            request = request.list(where=where, batch=batch)
         elif instance(obj, objects.Request):
             pass
         else:
@@ -249,9 +260,11 @@ class RemoteDataset:
         return params
 
     def delete_list(self, where=None):
-        url = "{}/delete".format(self.url)
+        url = "{}/list".format(self.url)
         params = self.get_params(where, None)
-        return objects.Request('POST', url, params, {}, None)
+        if 'where' not in params:
+            raise Exception('missing where')
+        return objects.Request('DELETE', url, params, {}, None)
 
     def list(self, where=None, batch=None):
         url = "{}/list".format(self.url)
@@ -365,7 +378,9 @@ def call(arg, method=None, data=None):
 
 def delete(req, arg=None):
     return client.delete(req, arg)
-def list(arg, batch=None):
-    return client.list(arg, batch=batch)
+def list(arg, where=None, batch=None):
+    return client.list(arg, where=None, batch=batch)
+def delete_list(req, where=None):
+    return client.delete_list(req, where=where)
 def create(arg, data):
     return client.create(arg, data)

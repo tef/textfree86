@@ -50,34 +50,41 @@ def test_client(url):
 
     for name in ('Mar', 'Jet', 'Pol'):
         person = client.create(s.Person,dict(name=name, job="foo"))
-        people.append(person)
 
     print()
 
-    print('Listing...')
+    print('Listing All...')
 
     total = 0
     for p in client.list(s.Person, batch=3):
         print(" Person", p.name)
-        print(" Calling p.hello()", client.call(p.hello()))
         total += 1
 
     print('Total', total)
     print()
 
-
-
-    print('Listing...')
+    print('Listing Subset...')
 
     total = 0
     for p in client.list(s.Person.where(job='foo')):
-        print(" Person", p)
         print(" Calling p.hello()", client.call(p.hello()))
         total += 1
 
     print('Total', total)
     print()
+
     print('Deleting...')
+    client.delete_list(s.Person.where(job='foo'))
+
+    print('Listing All...')
+
+    total = 0
+    for p in client.list(s.Person, batch=3):
+        print(" Person", p.name)
+        total += 1
+
+    print('Total', total)
+    print()
     for person in people:
         client.delete(person)
     print('Deleted')

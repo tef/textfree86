@@ -328,15 +328,19 @@ class Collection:
                         raise MethodNotAllowed()
 
             elif col_method =='list':
-                if method != 'GET':
-                    raise MethodNotAllowed()
-                selector = params.get('where','*')
-                limit = params.get('limit')
-                next = params.get('continue')
-                if limit:
-                    limit = int(limit)
-                selector = objects.parse_selector(selector)
-                return self.list(selector, limit, next)
+                if method == 'GET':
+                    selector = params.get('where','*')
+                    limit = params.get('limit')
+                    next = params.get('continue')
+                    if limit:
+                        limit = int(limit)
+                    selector = objects.parse_selector(selector)
+                    return self.list(selector, limit, next)
+                elif method == 'DELETE':
+                    selector = params['where']
+                    selector = objects.parse_selector(selector)
+                    self.delete_list(selector)
+                raise MethodNotAllowed()
             elif col_method == 'new':
                 if method != 'POST':
                     raise MethodNotAllowed()
@@ -420,7 +424,8 @@ class Collection:
         def delete(self, name):
             raise Exception('unimplemented')
 
-        def delete_list(self, selector, limit):
+        def delete_list(self, selector):
+            raise Exception('unimplemented')
             pass
 
         def list(self, selector, limit, next):
@@ -472,20 +477,24 @@ class Model:
         def delete(self, name):
             self.cls.delete().where(self.pk == name).execute()
 
+        def select_on(self, items, selector):
+            for s in selector:
+                key, operator, values = s['key'], s['operator'], s['values']
+                field = self.fields[key]
+                if operator == 'Equals':
+                    items = items.where(field == values)
+                elif operator == 'NotEquals':
+                    items = items.where(field != values)
+                else:
+                    raise Exception('unsupported')
+            return items
+
         def list(self, selector, limit, next):
             items = self.cls.select()
             pk = self.pk
             next_token = None
             if selector:
-                for s in selector:
-                    key, operator, values = s['key'], s['operator'], s['values']
-                    field = self.fields[key]
-                    if operator == 'Equals':
-                        items = items.where(field == values)
-                    elif operator == 'NotEquals':
-                        items = items.where(field != values)
-                    else:
-                        raise Exception('unsupported')
+                items = self.select_on(items, selector)
 
             if limit or next:
                 items = items.order_by(pk)
