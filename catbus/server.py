@@ -434,10 +434,10 @@ class Model:
         def __init__(self, name, cls):
             self.pk = cls._meta.primary_key
             self.key = self.pk.name
-            self.create_fields = list(k for k,v in cls._meta.fields.items() if not v.primary_key)
-            self.fields = list(k for k,v in cls._meta.fields.items())
+            self.fields = cls._meta.fields
+            self.create_fields = list(k for k,v in self.fields.items() if not v.primary_key)
             self.indexes = [self.pk.name]
-            self.indexes.extend(k for k,v in cls._meta.fields.items() if v.index or v.unique) 
+            self.indexes.extend(k for k,v in self.fields.items() if v.index or v.unique) 
             Collection.Handler.__init__(self, name, cls)
 
 
@@ -476,6 +476,16 @@ class Model:
             items = self.cls.select()
             pk = self.pk
             next_token = None
+            if selector:
+                for s in selector:
+                    key, operator, values = s['key'], s['operator'], s['values']
+                    field = self.fields[key]
+                    if operator == 'Equals':
+                        items = items.where(field == values)
+                    elif operator == 'NotEquals':
+                        items = items.where(field != values)
+                    else:
+                        raise Exception('unsupported')
 
             if limit or next:
                 items = items.order_by(pk)
