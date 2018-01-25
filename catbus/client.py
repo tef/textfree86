@@ -95,9 +95,9 @@ class Client:
         return self.fetch(request)
 
     
-    def list(self, request, limit=None):
+    def list(self, request, batch=None):
         if isinstance(request, RemoteCollection):
-            request = request.list(limit)
+            request = request.list(batch)
         elif instance(obj, objects.Request):
             pass
         else:
@@ -109,7 +109,7 @@ class Client:
             while obj:
                 for x in obj.values():
                     yield x
-                request = obj.next()
+                request = obj.next(batch)
                 if request:
                     obj = self.fetch(request)
                 else:
@@ -232,14 +232,14 @@ class RemoteCollection:
         url = "{}/id/{}".format(self.url, name)
         return objects.Request('DELETE', url, {}, {}, None)
 
-    def get_params(self,limit):
+    def get_params(self,batch):
         params = OrderedDict()
         if not self.selectors: 
             params['selector'] = '*'
         else:
             raise Exception('nope')
-        if limit:
-            params['limit'] = limit
+        if batch:
+            params['limit'] = batch
         return params
 
     def delete_list(self, limit=None):
@@ -247,9 +247,9 @@ class RemoteCollection:
         params = self.get_params(limit)
         return objects.Request('POST', url, params, {}, None)
 
-    def list(self, limit=None):
+    def list(self, batch=None):
         url = "{}/list".format(self.url)
-        params = self.get_params(limit)
+        params = self.get_params(batch)
         return objects.Request('GET', url, params, {}, None)
 
     def next(self, limit=None):
@@ -288,14 +288,17 @@ class RemoteList:
         self.kind = kind
         self.obj = obj
 
-    def next(self):
-        if self.obj.metadata['next']:
+    def next(self, batch):
+        if self.obj.metadata['continue']:
             params = OrderedDict()
             url = urljoin(self.base_url, self.obj.metadata['collection'])
             url = "{}/list".format(url)
+            params['selector'] = self.obj.metadata['selector']
+            params['continue'] = self.obj.metadata['continue']
+            if batch:
+                params['limit'] = batch
 
-            raise Exception('unimplemented')
-            return object.Request('GET', self.url, params, {}, None)
+            return objects.Request('GET', url, params, {}, None)
 
     def values(self):
         return self.obj.items
@@ -348,7 +351,7 @@ def call(arg, method=None, data=None):
 
 def delete(req, arg=None):
     return client.delete(req, arg)
-def list(arg):
-    return client.list(arg)
+def list(arg, batch=None):
+    return client.list(arg, batch)
 def create(arg, data):
     return client.create(arg, data)

@@ -248,14 +248,15 @@ class Collection:
             self.next = next
 
         def embed(self, prefix):
+            metadata = OrderedDict()
+            metadata["collection"] = "{}{}".format(prefix, self.name)
+            metadata["selector"] = self.selector
+            metadata["continue"] = self.next
+
             return objects.List(
                 kind = self.name,
                 items = self.items,
-                metadata = OrderedDict(
-                    collection = "{}{}".format(prefix, self.name),
-                    selector = self.selector,
-                    next = self.next
-                )
+                metadata = metadata,
             )
     def dict_handler(name, d=None):
         if d is None:
@@ -332,6 +333,8 @@ class Collection:
                 selector = params['selector']
                 limit = params.get('limit')
                 next = params.get('continue')
+                if limit:
+                    limit = int(limit)
                 return self.list(selector, limit, next)
             elif col_method == 'new':
                 if method != 'POST':
@@ -418,6 +421,9 @@ class Collection:
 
 class Model:
     class PeeweeHandler(Collection.Handler):
+        def pk(self):
+            return self.cls._meta.primary_key
+
         def extract_attributes(self, obj):
             attr = OrderedDict()
             for name in self.cls._meta.fields:
@@ -428,27 +434,44 @@ class Model:
             return attr
 
         def key_for(self, obj):
-            name = self.cls._meta.primary_key.name
+            name = self.pk().name
             attr = getattr(obj, name)
             if isinstance(attr, uuid.UUID):
                 attr = attr.hex
             return attr
 
         def lookup(self, name):
-            return self.cls.get(self.cls._meta.primary_key == name)
+            return self.cls.get(self.pk() == name)
 
         def create(self, data):
             return self.cls.create(**data)
 
         def delete(self, name):
-            self.cls.delete().where(self.cls._meta.primary_key == name).execute()
+            self.cls.delete().where(self.pk() == name).execute()
 
         def list(self, selector, limit, next):
+            items = self.cls.select()
+            pk = self.pk()
+            next_token = None
+
+            if limit or next:
+                items = items.order_by(pk)
+                if next:
+                    items = items.where(pk > next)
+                if limit:
+                    items = items.limit(limit)
+
+                items = list(items)
+                if items:
+                    next_token = self.key_for(items[-1])
+            else:
+                items = list(items)
+
             return Collection.List(
                 name=self.name, 
-                items=list(self.cls.select()),
                 selector=selector,
-                next=None
+                items=items,
+                next=next_token
             )
 
 class Namespace:

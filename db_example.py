@@ -49,10 +49,13 @@ def test_client(url):
 
     print('Listing...')
 
-    for p in client.list(s.Person):
+    total = 0
+    for p in client.list(s.Person, batch=1):
         print(" Person", p)
         print(" Calling p.hello()", client.call(p.hello()))
+        total += 1
 
+    print('Total', total)
     print('Deleting...')
     client.delete(person)
     print('Deleted')
