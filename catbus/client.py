@@ -62,7 +62,7 @@ class Client:
         return self.fetch(request)
 
     def create(self, request, data):
-        if isinstance(request, RemoteCollection):
+        if isinstance(request, RemoteDataset):
             request = request.create(**data)
         else:
             request = unwrap_request('PUT', request, data)
@@ -75,7 +75,7 @@ class Client:
         raise Exception('no')
     
     def lookup(self, request, data):
-        if isinstance(request, RemoteCollection):
+        if isinstance(request, RemoteDataset):
             request = request.lookup(data)
         else:
             request = unwrap_request('GET', request)
@@ -85,7 +85,7 @@ class Client:
         return self.fetch(request)
 
     def delete(self, request, arg=None):
-        if isinstance(request, RemoteCollection):
+        if isinstance(request, RemoteDataset):
             request = request.delete(arg)
         else:
             request = unwrap_request('DELETE', request)
@@ -96,7 +96,7 @@ class Client:
 
     
     def list(self, request, batch=None):
-        if isinstance(request, RemoteCollection):
+        if isinstance(request, RemoteDataset):
             request = request.list(batch)
         elif instance(obj, objects.Request):
             pass
@@ -161,8 +161,8 @@ class Client:
                 return RemoteFunction('GET', url, [])
             if isinstance(obj, objects.Form):
                 return RemoteFunction('POST', url, obj.arguments)
-            if isinstance(obj, objects.Collection):
-                return RemoteCollection(obj.kind, url, obj)
+            if isinstance(obj, objects.Dataset):
+                return RemoteDataset(obj.kind, url, obj)
             if isinstance(obj, objects.Resource):
                 return RemoteObject(obj.kind, url, obj)
 
@@ -198,7 +198,7 @@ class RemoteFunction:
                     data[key] = self.defaults
         return objects.Request('POST', self.url, {}, {}, data)
 
-class RemoteCollection:
+class RemoteDataset:
     def __init__(self, kind, url, obj, selectors=()):
         self.kind = kind
         self.url = url
@@ -220,7 +220,7 @@ class RemoteCollection:
     
     def create(self, *args, **kwargs):
         url = "{}/new".format(self.url)
-        arguments = self.obj.metadata['create']
+        arguments = self.obj.metadata['new']
         data = OrderedDict()
         for key, value in zip(arguments, args):
             data[key] = value
@@ -243,9 +243,9 @@ class RemoteCollection:
             params['limit'] = batch
         return params
 
-    def delete_list(self, limit=None):
+    def delete_list(self, batch=None):
         url = "{}/delete".format(self.url)
-        params = self.get_params(limit)
+        params = self.get_params(batch)
         return objects.Request('POST', url, params, {}, None)
 
     def list(self, batch=None):
@@ -253,34 +253,40 @@ class RemoteCollection:
         params = self.get_params(batch)
         return objects.Request('GET', url, params, {}, None)
 
-    def next(self, limit=None):
+    def next(self, batch=None):
         # so that remote collection / selectors have
         # similar apis
-        return self.list(limit)
+        return self.list(batch)
 
     def where(self, **kwargs):
         new_selectors = list(self.selectors)
+        names = self.obj.metadata['list']
         
         for name, value in kwargs:
+            if name not in names:
+                raise Exception('no')
             new_selectors.append(OrderedDict(
                 key=name,
                 operator="Equals",
                 values=value,
             ))
 
-        return RemoteCollection(self.kind, self.url, self.obj, new_selectors)
+        return RemoteDataset(self.kind, self.url, self.obj, new_selectors)
 
     def not_where(self, **kwargs):
         new_selectors = list(self.selectors)
+        names = self.obj.metadata['list']
 
         for name, value in kwargs:
+            if name not in names:
+                raise Exception('no')
             new_selectors.append(OrderedDict(
                 key=name,
                 operator="NotEquals",
                 values=value
         ))
         
-        return RemoteCollection(self.kind, self.url, self.obj, new_selectors)
+        return RemoteDataset(self.kind, self.url, self.obj, new_selectors)
 
 
 class RemoteList:

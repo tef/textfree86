@@ -263,16 +263,16 @@ class Collection:
             d = OrderedDict()
         class Handler(Collection.Handler):
             items = d
-            id = name
+            key = name
 
             def key_for(self, obj):
-                return getattr(obj, self.id)
+                return getattr(obj, self.key)
 
             def lookup(self, name):
                 return self.items[name]
 
             def create(self, data):
-                name = data[self.id]
+                name = data[self.key]
                 j = self.items[name] = self.cls(**data)
                 return j
 
@@ -357,10 +357,11 @@ class Collection:
         def link(self, prefix):
             metadata = OrderedDict(
                 url = self.url(prefix),
-                create=self.create_args(),
+                new=self.create_args(),
                 select=self.selector_args(),
+                key=self.key
             )
-            return objects.Collection(
+            return objects.Dataset(
                 kind=self.cls.__name__,
                 metadata = metadata
             )
@@ -431,11 +432,13 @@ class Model:
     class PeeweeHandler(Collection.Handler):
         def __init__(self, name, cls):
             self.pk = cls._meta.primary_key
+            self.key = self.pk.name
             self.create_fields = list(k for k,v in cls._meta.fields.items() if not v.primary_key)
             self.fields = list(k for k,v in cls._meta.fields.items())
             self.indexes = [self.pk.name]
             self.indexes.extend(k for k,v in cls._meta.fields.items() if v.index or v.unique) 
             Collection.Handler.__init__(self, name, cls)
+
 
         def create_args(self):
             return self.create_fields

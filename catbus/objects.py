@@ -84,7 +84,7 @@ class Form(Hyperlink):
         self.defaults = defaults
 
 @registry.add()
-class Collection(Hyperlink):
+class Dataset(Hyperlink):
     def __init__(self, kind, metadata):
         self.kind = kind
         self.metadata = metadata
