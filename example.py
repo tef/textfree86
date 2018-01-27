@@ -94,62 +94,59 @@ def test():
     print("Running on ",server_thread.url)
 
     try:
-        s= client.get(server_thread.url+"/test/")
+        s= client.Get(server_thread.url+"/test/")
         print(s)
         print(s.echo)
 
-        r = client.call(s.echo(1))
+        r = client.Call(s.echo(1))
         print(r)
 
-        test = client.call(s.test())
+        test = client.Call(s.test())
         print(test)
         
-        x = client.call(test(x=1))
+        x = client.Call(test(x=1))
         print(x)
 
         print(s.MyEndpoint())
-        e = client.get(s.MyEndpoint())
+        e = client.Get(s.MyEndpoint())
 
-        print(client.call(e.rpc_one(1,2)))
+        print(client.Call(e.rpc_one(1,2)))
 
-        print(client.call(e.rpc_two(3,b=4)))
+        print(client.Call(e.rpc_two(3,b=4)))
         
-        print(client.call(e.rpc_three()))
+        print(client.Call(e.rpc_three()))
 
-        print(client.call(e.now()))
+        print(client.Call(e.now()))
 
-        counter = client.call(s.Counter(10))
-        counter = client.call(counter.next())
-        counter = client.call(counter.next())
-        counter = client.call(counter.next())
+        counter = client.Call(s.Counter(10))
+        counter = client.Call(counter.next())
+        counter = client.Call(counter.next())
+        counter = client.Call(counter.next())
         print(counter)
         print('nice')
-        value = client.post(counter.value())
+        value = client.Post(counter.value())
 
-        total = client.call(s.Total())
+        total = client.Call(s.Total())
 
-        print(client.call(total.total()))
+        print(client.Call(total.total()))
 
-        client.call(total.add(5))
-        client.call(total.add(5))
-        client.call(total.add(5))
+        client.Call(total.add(5))
+        client.Call(total.add(5))
+        client.Call(total.add(5))
 
-        print(client.call(total.total()))
-
-
-
+        print(client.Call(total.total()))
 
         print(value, counter.num)
 
-        job = client.create(s.Job,dict(name="butt"))
-            # client.call(s.Job.create(...))
+        job = client.Create(s.Job,dict(name="butt"))
+            # client.Call(s.Job.create(...))
 
         print(job, job.url, job.methods, job.attributes)
 
-        for j in client.list(s.Job):
+        for j in client.List(s.Job):
             print(j)
 
-        print(client.delete(job))
+        print(client.Delete(job))
     finally:
         server_thread.stop()
 

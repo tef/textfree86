@@ -9,6 +9,8 @@ RemoteObject/RemoteFunction wrapper objects.
 # warning: defines a function called list
 _list = list
 
+import os
+
 from functools import singledispatch
 from urllib.parse import urljoin
 from collections import OrderedDict
@@ -34,49 +36,14 @@ class Client:
     def __init__(self):
         self.session=requests.session()
 
-    def get(self, request):
+    def Get(self, request):
         request = unwrap_request('GET', request)
 
         if request.method != 'GET':
             raise Exception('mismatch')
         return self.fetch(request)
 
-    def post(self, request, data=None):
-        request = unwrap_request('POST', request, data)
-
-        if request.method != 'POST':
-            raise Exception('mismatch')
-        
-        return self.fetch(request)
-
-    def call(self, request, method=None, data=None):
-        if isinstance(request, RemoteFunction):
-            if method is None:
-                request = request(**data)
-            else:
-                raise Exception('no')
-        elif isinstance(request, RemoteObject):
-            if method is None:
-                raise Exception('no')
-            else:
-                request = getattr(request, method)(**data)
-        request = unwrap_request('POST', request, data)
-
-        return self.fetch(request)
-
-    def create(self, request, data):
-        if isinstance(request, RemoteDataset):
-            request = request.create(**data)
-        else:
-            request = unwrap_request('PUT', request, data)
-        if request.method not in ('PUT', 'POST'):
-            raise Exception('mismatch')
-
-        return self.fetch(request)
-
-    def update(self, request, data):
-        raise Exception('no')
-    
+    # merge
     def lookup(self, request, data):
         if isinstance(request, RemoteDataset):
             request = request.lookup(data)
@@ -87,7 +54,23 @@ class Client:
 
         return self.fetch(request)
 
-    def delete(self, request, arg=None):
+    def Set(self, request, data):
+        raise Exception('no')
+    
+    def Create(self, request, data):
+        if isinstance(request, RemoteDataset):
+            request = request.create(**data)
+        else:
+            request = unwrap_request('PUT', request, data)
+        if request.method not in ('PUT', 'POST'):
+            raise Exception('mismatch')
+
+        return self.fetch(request)
+
+    def Update(self, request, data):
+        raise Exception('unimplemented')
+
+    def Delete(self, request, arg=None):
         if isinstance(request, RemoteDataset):
             request = request.delete(arg)
         else:
@@ -97,8 +80,8 @@ class Client:
 
         return self.fetch(request)
 
-    
-    def delete_list(self, request, where=None):
+    #merge
+    def Delete_list(self, request, where=None):
         if isinstance(request, RemoteDataset):
             request = request.delete_list(where=where)
         elif instance(obj, objects.Request):
@@ -107,9 +90,8 @@ class Client:
             raise Exception('no')
 
         return self.fetch(request)
-
     
-    def list(self, request, where=None, batch=None):
+    def List(self, request, where=None, batch=None):
         if isinstance(request, RemoteDataset):
             request = request.list(where=where, batch=batch)
         elif instance(obj, objects.Request):
@@ -131,9 +113,35 @@ class Client:
         else:
             for x in obj:
                 yield x
+    
+    def Call(self, request, method=None, data=None):
+        if isinstance(request, RemoteFunction):
+            if method is None:
+                request = request(**data)
+            else:
+                raise Exception('no')
+        elif isinstance(request, RemoteObject):
+            if method is None:
+                raise Exception('no')
+            else:
+                request = getattr(request, method)(**data)
+        request = unwrap_request('POST', request, data)
 
-    def watch(self, request):
-        pass
+        return self.fetch(request)
+
+    def Wait(self, request):
+        raise Exception('no')
+
+    def Watch(self, request):
+        raise Exception('no')
+
+    def Post(self, request, data=None):
+        request = unwrap_request('POST', request, data)
+
+        if request.method != 'POST':
+            raise Exception('mismatch')
+        
+        return self.fetch(request)
 
     def fetch(self, request):
         headers = OrderedDict(HEADERS)
@@ -171,6 +179,7 @@ class Client:
 
             if isinstance(obj, objects.Link):
                 if obj.value:
+                    raise Exception('fixme')
                     return lambda: obj.value
                 return RemoteFunction('GET', url, [])
             if isinstance(obj, objects.Form):
@@ -367,20 +376,30 @@ class RemoteObject:
 
 client = Client()
 
-def get(arg):
-    return client.get(arg)
+if __name__ == '__main__':
+    endpoint = os.environ['CATBUS_URL']
+    
+    service = client.get(endpoint)
+    print(service)
 
-def post(arg, data=None):
-    return client.post(arg, data)
 
-def call(arg, method=None, data=None):
-    return client.call(arg, method, data)
+def Get(arg):
+    return client.Get(arg)
 
-def delete(req, arg=None):
-    return client.delete(req, arg)
-def list(arg, where=None, batch=None):
-    return client.list(arg, where=None, batch=batch)
-def delete_list(req, where=None):
-    return client.delete_list(req, where=where)
-def create(arg, data):
-    return client.create(arg, data)
+def Post(arg, data=None):
+    return client.Post(arg, data)
+
+def Call(arg, method=None, data=None):
+    return client.Call(arg, method, data)
+
+def Delete(req, arg=None):
+    return client.Delete(req, arg)
+
+def List(arg, where=None, batch=None):
+    return client.List(arg, where=None, batch=batch)
+
+def Delete_list(req, where=None):
+    return client.Delete_list(req, where=where)
+
+def Create(arg, data):
+    return client.Create(arg, data)

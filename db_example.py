@@ -40,23 +40,23 @@ def test():
 
 
 def test_client(url):
-    s= client.get(url)
+    s= client.Get(url)
 
     print('Creating...')
     people = []
     for name in ('Dave', 'Eve', 'Sam'):
-        person = client.create(s.Person,dict(name=name, job="bar"))
+        person = client.Create(s.Person,dict(name=name, job="bar"))
         people.append(person)
 
     for name in ('Mar', 'Jet', 'Pol'):
-        person = client.create(s.Person,dict(name=name, job="foo"))
+        person = client.Create(s.Person,dict(name=name, job="foo"))
 
     print()
 
     print('Listing All...')
 
     total = 0
-    for p in client.list(s.Person, batch=3):
+    for p in client.List(s.Person, batch=3):
         print(" Person", p.name)
         total += 1
 
@@ -66,27 +66,27 @@ def test_client(url):
     print('Listing Subset...')
 
     total = 0
-    for p in client.list(s.Person.where(job='foo')):
-        print(" Calling p.hello()", client.call(p.hello()))
+    for p in client.List(s.Person.where(job='foo')):
+        print(" Calling p.hello()", client.Call(p.hello()))
         total += 1
 
     print('Total', total)
     print()
 
     print('Deleting...')
-    client.delete_list(s.Person.where(job='foo'))
+    client.Delete_list(s.Person.where(job='foo'))
 
     print('Listing All...')
 
     total = 0
-    for p in client.list(s.Person, batch=3):
+    for p in client.List(s.Person, batch=3):
         print(" Person", p.name)
         total += 1
 
     print('Total', total)
     print()
     for person in people:
-        client.delete(person)
+        client.Delete(person)
     print('Deleted')
 if __name__ == '__main__':
     test()
