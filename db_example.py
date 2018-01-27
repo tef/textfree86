@@ -45,11 +45,11 @@ def test_client(url):
     print('Creating...')
     people = []
     for name in ('Dave', 'Eve', 'Sam'):
-        person = client.Create(s.Person,dict(name=name, job="bar"))
+        person = client.Create(s.Person, value=dict(name=name, job="bar"))
         people.append(person)
 
     for name in ('Mar', 'Jet', 'Pol'):
-        person = client.Create(s.Person,dict(name=name, job="foo"))
+        person = client.Create(s.Person, value=dict(name=name, job="foo"))
 
     print()
 
@@ -74,7 +74,7 @@ def test_client(url):
     print()
 
     print('Deleting...')
-    client.Delete_list(s.Person.where(job='foo'))
+    client.Delete(s.Person.where(job='foo'))
 
     print('Listing All...')
 
@@ -85,8 +85,21 @@ def test_client(url):
 
     print('Total', total)
     print()
+
     for person in people:
         client.Delete(person)
     print('Deleted')
+
+    	
+    print('Listing All...')
+
+    total = 0
+    for p in client.List(s.Person, batch=3):
+        print(" Person", p.name)
+        total += 1
+
+    print('Total', total)
+    print()
+
 if __name__ == '__main__':
     test()

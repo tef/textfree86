@@ -36,43 +36,43 @@ class Client:
     def __init__(self):
         self.session=requests.session()
 
-    def Get(self, request):
-        request = unwrap_request('GET', request)
+    def Get(self, request, key=None):
+        if key and isinstance(request, RemoteDataset):
+            request = request.lookup(key)
+        elif key:
+            raise Exception('first argument not a dataset/collection')
+        else:
+            request = unwrap_request('GET', request)
 
         if request.method != 'GET':
             raise Exception('mismatch')
-        return self.fetch(request)
-
-    # merge
-    def lookup(self, request, data):
-        if isinstance(request, RemoteDataset):
-            request = request.lookup(data)
-        else:
-            request = unwrap_request('GET', request)
-            if request.method != 'GET' or data != None:
-                raise Exception('mismatch')
 
         return self.fetch(request)
 
-    def Set(self, request, data):
+    def Set(self, request, key=None, value=None):
         raise Exception('no')
     
-    def Create(self, request, data):
-        if isinstance(request, RemoteDataset):
-            request = request.create(**data)
+    def Create(self, request, key=None, value=None):
+        if not key and isinstance(request, RemoteDataset):
+            request = request.create(**value)
         else:
-            request = unwrap_request('PUT', request, data)
+            request = unwrap_request('PUT', request, value)
         if request.method not in ('PUT', 'POST'):
             raise Exception('mismatch')
 
         return self.fetch(request)
 
-    def Update(self, request, data):
+    def Update(self, request, key=None, value=None):
         raise Exception('unimplemented')
 
-    def Delete(self, request, arg=None):
-        if isinstance(request, RemoteDataset):
-            request = request.delete(arg)
+    def Delete(self, request, key=None, where=None):
+        if key and where:
+            raise Exception('too many argments')
+
+        if key and isinstance(request, RemoteDataset):
+            request = request.delete(key)
+        elif isinstance(request, RemoteDataset):
+            request = request.delete_list(where=where)
         else:
             request = unwrap_request('DELETE', request)
         if request.method not in ('DELETE', 'POST'):
@@ -80,17 +80,6 @@ class Client:
 
         return self.fetch(request)
 
-    #merge
-    def Delete_list(self, request, where=None):
-        if isinstance(request, RemoteDataset):
-            request = request.delete_list(where=where)
-        elif instance(obj, objects.Request):
-            pass
-        else:
-            raise Exception('no')
-
-        return self.fetch(request)
-    
     def List(self, request, where=None, batch=None):
         if isinstance(request, RemoteDataset):
             request = request.list(where=where, batch=batch)
@@ -178,10 +167,7 @@ class Client:
             url = urljoin(result.url, obj.url)
 
             if isinstance(obj, objects.Link):
-                if obj.value:
-                    raise Exception('fixme')
-                    return lambda: obj.value
-                return RemoteFunction('GET', url, [])
+                return RemoteFunction('GET', url, [], obj.value)
             if isinstance(obj, objects.Form):
                 return RemoteFunction('POST', url, obj.arguments)
             if isinstance(obj, objects.Dataset):
@@ -382,24 +368,13 @@ if __name__ == '__main__':
     service = client.get(endpoint)
     print(service)
 
-
-def Get(arg):
-    return client.Get(arg)
-
-def Post(arg, data=None):
-    return client.Post(arg, data)
-
-def Call(arg, method=None, data=None):
-    return client.Call(arg, method, data)
-
-def Delete(req, arg=None):
-    return client.Delete(req, arg)
-
-def List(arg, where=None, batch=None):
-    return client.List(arg, where=None, batch=batch)
-
-def Delete_list(req, where=None):
-    return client.Delete_list(req, where=where)
-
-def Create(arg, data):
-    return client.Create(arg, data)
+Get = client.Get
+Set = client.Set
+Create = client.Create
+Update = client.Update
+Delete = client.Delete
+List = client.List
+Call = client.Call
+Wait = client.Wait
+Watch = client.Watch
+Post = client.Post

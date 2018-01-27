@@ -138,7 +138,7 @@ def test():
 
         print(value, counter.num)
 
-        job = client.Create(s.Job,dict(name="butt"))
+        job = client.Create(s.Job,value=dict(name="butt"))
             # client.Call(s.Job.create(...))
 
         print(job, job.url, job.methods, job.attributes)
