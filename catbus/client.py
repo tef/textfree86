@@ -10,8 +10,8 @@ RemoteObject/RemoteFunction wrapper objects.
 _list = list
 
 import os
+import sys
 
-from functools import singledispatch
 from urllib.parse import urljoin
 from collections import OrderedDict
 
@@ -31,6 +31,10 @@ def unwrap_request(method, request, data=None):
         request = request.url
 
     return objects.Request(method, request, {}, {}, data)
+
+class CachedResult:
+    def __init__(self, result):
+        self.result = result
 
 class Client:
     def __init__(self):
@@ -167,7 +171,7 @@ class Client:
             url = urljoin(result.url, obj.url)
 
             if isinstance(obj, objects.Link):
-                return RemoteFunction('GET', url, [], obj.value)
+                return RemoteFunction('GET', url, [])
             if isinstance(obj, objects.Form):
                 return RemoteFunction('POST', url, obj.arguments)
             if isinstance(obj, objects.Dataset):
@@ -360,13 +364,17 @@ class RemoteObject:
             return RemoteFunction('POST', url, arguments)
         raise AttributeError('no')
 
+def main(client, endpoint, args):
+    service = client.Get(endpoint)
+    print(service)
+    return -1
+
 client = Client()
 
 if __name__ == '__main__':
     endpoint = os.environ['CATBUS_URL']
+    sys.exit(main(client, endpoint, sys.argv[1:]))
     
-    service = client.get(endpoint)
-    print(service)
 
 Get = client.Get
 Set = client.Set

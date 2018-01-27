@@ -1,5 +1,6 @@
 from catbus import client, server
 
+import sys
 import collections
 import uuid
 from datetime import datetime, timezone
@@ -38,6 +39,20 @@ def test():
     finally:
         server_thread.stop()
 
+
+def run():
+    db.connect()
+    db.create_tables([Person], safe=True)
+
+    server_thread = server.Server(namespace.app(), port=8888)
+    server_thread.start()
+
+    print("Running on ",server_thread.url)
+
+    try:
+        while True: pass
+    finally:
+        server_thread.stop()
 
 def test_client(url):
     s= client.Get(url)
@@ -102,4 +117,7 @@ def test_client(url):
     print()
 
 if __name__ == '__main__':
-    test()
+    if 'run' in sys.argv:
+        run()
+    else:
+        test()
