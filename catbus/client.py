@@ -181,7 +181,6 @@ class Client:
             if isinstance(obj, objects.Service):
                 return RemoteObject(obj.kind, url, obj)
 
-
             return obj
 
         obj = objects.parse(result.text, transform)
@@ -321,7 +320,7 @@ class RemoteList:
         if self.obj.metadata['continue']:
             params = OrderedDict()
             url = urljoin(self.base_url, self.obj.metadata['collection'])
-            url = "{}/list".format(url)
+            #url = "{}/list".format(url)
             params['selector'] = self.obj.metadata['selector']
             params['continue'] = self.obj.metadata['continue']
             if batch:

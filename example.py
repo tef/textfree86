@@ -15,6 +15,18 @@ def make_server():
         return echo
 
     @n.add()
+    @server.future()
+    def expensive(value):
+        return server.Future(value=value,count=3)
+
+    @expensive.resolve()
+    def expensive(value, count):
+        if count > 0:
+            return server.Future(value=value, count=count-1)
+        else:
+            return value
+
+    @n.add()
     class MyEndpoint(server.Service):
         # no self, all methods exposed.
 

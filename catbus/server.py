@@ -73,22 +73,82 @@ def rpc(safe=False):
     def _fn(fn):
         fn.rpc = True
         fn.safe = safe
+        fn.resolve = None
+        if future:
+            def _wait():
+                def _decorator(wait_fn):
+                    fn.wait = wait_fn
+                    return fn
+
+                return _decorator
+
+            fn.resolve = _wait
+        return fn
+    return _fn
+
+def future():
+    def _fn(fn):
+        fn.rpc = True
+        fn.future = None
+        def _wait():
+            def _decorator(wait_fn):
+                fn.future = wait_fn
+                return fn
+            return _decorator
+        fn.resolve = _wait
         return fn
     return _fn
 
 class RequestHandler:
+    def invoke(self, obj, method=None, args=None, safe=False):
+        if args:
+            if method:
+                return getattr(obj, method)(**args)
+            else:
+                return obj(**args)
+        else:
+            if method:
+                return getattr(obj, method)()
+            else:
+                return obj()
+
+    def invoke_future(self, future, params):
+        pass
+
+class Embed:
     pass
     
+class Future(Embed):
+    suffix = '/wait'
+
+    def __init__(self, **args):
+        self.args = args
+        self.name = none
+
+    def resolve(self, prefix, name):
+        params = {key: objects.dump(value) for key, value in self.args.items()}
+        url = "{}{}{}?{}".format(prefix, name, self.suffix, urlencode(params))
+        metadata = OrderedDict(self.metadata)
+        metadata["url"] = url
+        return objects.Future(
+            metadata = metadata,
+        )
+
+class NamedFuture(Embed):
+    class Handler(RequestHandler):
+        pass
+
 class FunctionHandler(RequestHandler):
     def __init__(self, name, function):
         self.fn = function
         self.name = name
 
     def on_request(self, method, path, params, data):
+        path = path[len(self.name)+1:]
         if method == 'GET':
-            return self.fn
+            return self.invoke(self.fn, safe=True)
         elif method == 'POST':
-            return self.fn(**data)
+            return self.invoke(self.fn, args=data)
         raise MethodNotAllowed()
 
     def url(self, prefix):
@@ -177,9 +237,9 @@ class Token:
                     raise MethodNotAllowed()
 
                 if method == 'POST':
-                    return getattr(obj, path)(**data)
+                    return self.invoke(obj, path, data)
                 elif method == 'GET':
-                    return getattr(obj, path)()
+                    return self.invoke(obj, path, safe=True)
                 else:
                     raise MethodNotAllowed()
             else:
@@ -229,12 +289,12 @@ class Singleton:
                 raise Forbidden()
             if method == 'GET':
                 if path:
-                    return getattr(self.obj, path)()
+                    return self.invoke(self.obj, path, safe=True)
                 else:
                     return self.cls()
             elif method == 'POST':
                 if path:
-                    return getattr(self.obj, path)(**data)
+                    return self.invoke(self.obj, path,data)
                 else:
                     raise MethodNotAllowed()
             else:
@@ -252,16 +312,17 @@ class Singleton:
             return make_resource(o, self.url(prefix))
 
 class Collection:
-    class List:
+    class List(Embed):
+        suffix = '/list'
         def __init__(self, name, items, selector, next):
             self.name = name
             self.items = items
             self.selector = selector
             self.next = next
 
-        def embed(self, prefix):
+        def embed(self, prefix, name):
             metadata = OrderedDict()
-            metadata["collection"] = "{}{}".format(prefix, self.name)
+            metadata["collection"] = "{}{}{}".format(prefix, self.name, self.suffix)
             metadata["selector"] = self.selector
             metadata["continue"] = self.next
 
@@ -333,9 +394,9 @@ class Collection:
                 else:
                     obj = self.lookup(id)
                     if method == 'GET':
-                        return getattr(obj, obj_method)()
+                        return self.invoke(obj, obj_method, safe=True)
                     elif method == 'POST':
-                        return getattr(obj, obj_method)(**data)
+                        return self.invoke(obj, obj_method,data)
                     else:
                         raise MethodNotAllowed()
 
@@ -600,8 +661,8 @@ class Namespace:
                     return self.handlers[self.paths[o]].embed(self.prefix, o)
             elif o.__class__ in self.paths:
                 return self.handlers[self.paths[o.__class__]].embed(self.prefix, o)
-            elif isinstance(o, Collection.List):
-                return o.embed(self.prefix)
+            elif isinstance(o, Embed):
+                return o.embed(self.prefix, path)
             return o
 
         if out is None:

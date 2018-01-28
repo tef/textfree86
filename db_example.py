@@ -71,7 +71,7 @@ def test_client(url):
     print('Listing All...')
 
     total = 0
-    for p in client.List(s.Person, batch=3):
+    for p in client.List(s.Person, batch=1):
         print(" Person", p.name)
         total += 1
 
