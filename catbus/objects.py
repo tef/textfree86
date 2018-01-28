@@ -84,6 +84,15 @@ class Form(Hyperlink):
         self.defaults = defaults
 
 @registry.add()
+class Future(Hyperlink):
+    def __init__(self, metadata):
+        self.metadata = metadata
+
+    @property
+    def url(self):
+        return self.metadata['url']
+
+@registry.add()
 class Dataset(Hyperlink):
     def __init__(self, kind, metadata):
         self.kind = kind

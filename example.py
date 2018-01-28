@@ -25,6 +25,9 @@ def make_server():
             return server.Future(value=value, count=count-1)
         else:
             return value
+    #@n.add()
+    #class MyFuture(server.Future):
+    #   pass
 
     @n.add()
     class MyEndpoint(server.Service):
@@ -159,6 +162,20 @@ def test():
             print(j)
 
         print(client.Delete(job))
+
+        exp = client.Call(s.expensive(123))
+
+        print(exp)
+        print(exp.url)
+
+        exp = client.Get(exp.url)
+        print(exp, exp.url)
+        exp = client.Get(exp.url)
+        print(exp, exp.url)
+        exp = client.Get(exp.url)
+        print(exp, exp.url)
+        exp = client.Get(exp.url)
+        print(exp)
     finally:
         server_thread.stop()
 

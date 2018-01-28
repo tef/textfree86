@@ -113,7 +113,8 @@ class RequestHandler:
                 return obj()
 
     def invoke_future(self, future, params):
-        pass
+        params = {key: objects.parse(value) for key,value in params.items()}
+        return future(**params)
 
 class Embed:
     pass
@@ -123,12 +124,12 @@ class Future(Embed):
 
     def __init__(self, **args):
         self.args = args
-        self.name = none
 
-    def resolve(self, prefix, name):
+    def embed(self, prefix, name):
         params = {key: objects.dump(value) for key, value in self.args.items()}
-        url = "{}{}{}?{}".format(prefix, name, self.suffix, urlencode(params))
-        metadata = OrderedDict(self.metadata)
+        name = "{}{}".format(name,self.suffix) if not name.endswith(self.suffix) else name
+        url = "{}{}?{}".format(prefix, name,urlencode(params))
+        metadata = OrderedDict()
         metadata["url"] = url
         return objects.Future(
             metadata = metadata,
@@ -145,6 +146,14 @@ class FunctionHandler(RequestHandler):
 
     def on_request(self, method, path, params, data):
         path = path[len(self.name)+1:]
+        if path == 'wait':
+            if method == 'GET':
+                return self.invoke_future(self.fn.future, params)
+            else:
+                return MethodNotAllowed()
+        elif path:
+            raise NotFound()
+
         if method == 'GET':
             return self.invoke(self.fn, safe=True)
         elif method == 'POST':
@@ -186,10 +195,10 @@ class Service:
                 raise Forbidden()
             if method == 'GET':
                 if path:
-                    return self.service.__dict__[path]()
+                    return self.invoke(self.service,path, safe=True)
                 return self.service()
             elif method == 'POST':
-                return self.service.__dict__[path](**data)
+                return self.invoke(self.service, path, data)
             else:
                 raise MethodNotAllowed()
 
