@@ -142,7 +142,19 @@ class Service:
         def embed(self,prefix, o=None):
             if o is None or o is self.service:
                 return self.link(prefix)
-            return make_resource(o, self.url(prefix))
+
+            links, methods = extract_methods(self.service)
+
+            metadata = OrderedDict(
+                url = self.url(prefix),
+                links = links,
+                methods = methods,
+            )
+
+            return objects.Service(
+                kind = self.service.__name__,
+                metadata = metadata,
+            )
 
 class Token:
     rpc = True

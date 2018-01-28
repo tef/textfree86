@@ -178,6 +178,9 @@ class Client:
                 return RemoteDataset(obj.kind, url, obj)
             if isinstance(obj, objects.Resource):
                 return RemoteObject(obj.kind, url, obj)
+            if isinstance(obj, objects.Service):
+                return RemoteObject(obj.kind, url, obj)
+
 
             return obj
 
@@ -341,7 +344,7 @@ class RemoteObject:
         self.url = url
         self.obj = obj
         self.links = obj.metadata.get('links')
-        self.attributes = obj.attributes
+        self.attributes = getattr(obj, 'attributes', {})
         self.methods = obj.metadata.get('methods')
 
     def __str__(self):

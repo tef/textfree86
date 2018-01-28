@@ -94,6 +94,17 @@ class Dataset(Hyperlink):
         return self.metadata['url']
 
 @registry.add()
+class Service(Hyperlink):
+    def __init__(self, kind, metadata):
+        self.kind = kind
+        self.metadata = OrderedDict(metadata)
+
+    @property
+    def url(self):
+        return self.metadata['url']
+
+
+@registry.add()
 class List(Hyperlink):
     def __init__(self, kind, metadata, items):
         self.kind = kind
@@ -106,6 +117,7 @@ class Resource(Hyperlink):
         self.kind = kind
         self.attributes = attributes
         self.metadata = OrderedDict(metadata)
+
     @property
     def url(self):
         return self.metadata['url']
