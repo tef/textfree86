@@ -100,21 +100,21 @@ def future():
     return _fn
 
 class RequestHandler:
-    def invoke(self, obj, method=None, args=None, safe=False):
+    def invoke(self, obj, args=None, params=None, safe=False):
         if args:
-            if method:
-                return getattr(obj, method)(**args)
-            else:
-                return obj(**args)
+            return obj(**args)
         else:
-            if method:
-                return getattr(obj, method)()
-            else:
-                return obj()
+            return obj()
 
     def invoke_future(self, future, params):
         params = {key: objects.parse(value) for key,value in params.items()}
-        return future(**params)
+        # if future is a fn
+        obj = future(**params)
+        # if future is a future, call.resolve()
+
+        if isinstance(obj, Future):
+            obj.from_resolve = True
+        return obj
 
 class Embed:
     pass
@@ -124,10 +124,12 @@ class Future(Embed):
 
     def __init__(self, **args):
         self.args = args
+        self.from_resolve = False
 
     def embed(self, prefix, name):
         params = {key: objects.dump(value) for key, value in self.args.items()}
-        name = "{}{}".format(name,self.suffix) if not name.endswith(self.suffix) else name
+        if not self.from_resolve:
+            name = "{}{}".format(name,self.suffix) if not name.endswith(self.suffix) else name
         url = "{}{}?{}".format(prefix, name,urlencode(params))
         metadata = OrderedDict()
         metadata["url"] = url
@@ -190,17 +192,25 @@ class Service:
             self.name = name
 
         def on_request(self, method, path, params, data):
-            path = path[len(self.name)+1:]
-            if path.startswith('_'): 
-                raise Forbidden()
-            if method == 'GET':
-                if path:
-                    return self.invoke(self.service,path, safe=True)
-                return self.service()
-            elif method == 'POST':
-                return self.invoke(self.service, path, data)
+            path = path[len(self.name)+1:].split('/')
+            if path and path[0]:
+                obj_method = path[0]
+                if obj_method.startswith('_'): 
+                    raise Forbidden()
+                fn = getattr(self.service, obj_method)
+            
+                if method == 'GET':
+                    return self.invoke(fn, params=params, safe=True)
+                elif method == 'POST':
+                    return self.invoke(fn, args=data)
+                else:
+                    raise MethodNotAllowed()
+
             else:
-                raise MethodNotAllowed()
+                if method == 'GET':
+                    return self.service()
+                else:
+                    raise MethodNotAllowed()
 
         def url(self, prefix):
             return prefix+self.name
@@ -236,6 +246,8 @@ class Token:
             path = path[len(self.name)+1:]
             if path.startswith('_'): 
                 raise Forbidden()
+            if '/' in path:
+                raise NotFound()
 
             if params:
                 obj =  self.lookup(params)
@@ -245,10 +257,12 @@ class Token:
                         return obj
                     raise MethodNotAllowed()
 
+                fn = getattr(obj, path)
+
                 if method == 'POST':
-                    return self.invoke(obj, path, data)
+                    return self.invoke(fn, args=data)
                 elif method == 'GET':
-                    return self.invoke(obj, path, safe=True)
+                    return self.invoke(fn, safe=True)
                 else:
                     raise MethodNotAllowed()
             else:
@@ -294,20 +308,21 @@ class Singleton:
 
         def on_request(self, method, path, params, data):
             path = path[len(self.name)+1:]
-            if path.startswith('_'): 
-                raise Forbidden()
-            if method == 'GET':
-                if path:
-                    return self.invoke(self.obj, path, safe=True)
-                else:
-                    return self.cls()
-            elif method == 'POST':
-                if path:
-                    return self.invoke(self.obj, path,data)
+            if path:
+                if path.startswith('_'): 
+                    raise Forbidden()
+                fn = getattr(self.obj, path)
+                if method == 'GET':
+                    return self.invoke(fn, params=params, safe=True)
+                elif method == 'POST':
+                    return self.invoke(fn, args=data)
                 else:
                     raise MethodNotAllowed()
             else:
-                raise MethodNotAllowed()
+                if method == 'GET':
+                    return self.obj
+                else:
+                    raise MethodNotAllowed()
 
         def url(self, prefix):
             return prefix + self.name
@@ -402,10 +417,12 @@ class Collection:
                         raise MethodNotAllowed()
                 else:
                     obj = self.lookup(id)
+                    fn = getattr(obj, obj_method)
+
                     if method == 'GET':
-                        return self.invoke(obj, obj_method, safe=True)
+                        return self.invoke(fn, params=params, safe=True)
                     elif method == 'POST':
-                        return self.invoke(obj, obj_method,data)
+                        return self.invoke(fn, data)
                     else:
                         raise MethodNotAllowed()
 
