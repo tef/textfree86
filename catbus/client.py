@@ -181,13 +181,24 @@ class Client:
             if isinstance(obj, objects.Service):
                 return RemoteObject(obj.kind, url, obj)
             if isinstance(obj, objects.Waiter):
-                obj.metadata['url'] = url
+                return RemoteWaiter(obj, url) 
 
             return obj
 
         obj = objects.parse(result.text, transform)
 
         return obj
+
+class RemoteWaiter:
+    def __init__(self, obj, url):
+        self.url = url
+        self.obj = obj
+
+    def __str__(self):
+        return "<Waiting for {}>".format(self.url)
+
+    def __call__(self, *args, **kwargs):
+        return objects.Request('GET', self.url, {}, {}, None)
 
 class RemoteFunction:
     def __init__(self, method, url, arguments, defaults=()):
