@@ -1,5 +1,10 @@
 # catbus, a client-server framework
 
+"why have protocols when you have to write a new client for each service"
+
+catbus is a client-server framework for RPC, CRUD, and Socket-like APIs, with a reusable client.
+
+There is no codegen or schema used in the following examples:
 
 ## serving a function
 ```
@@ -100,3 +105,55 @@ job = client.get(s.Job["helium"])
 client.delete(job)
 ```
 
+## long polling
+
+```
+waiter = client.Call(s.expensive(123))
+
+value = client.Wait(waiter, poll_seconds=0.5)
+```
+
+
+```
+@n.add()
+@server.waiter()
+def expensive(value):
+    return server.Waiter(value=value,count=3)
+
+@expensive.ready()
+def expensive(value, count):
+    if count > 0:
+        return server.Waiter(value=value, count=count-1)
+    else:
+        return value
+```
+
+## exposing a table
+
+```
+@namespace.add()
+class Person(Model):
+    class Meta: database = db
+
+    uuid = UUIDField(primary_key=True, default=uuid.uuid4)
+    name = CharField(index=True)
+    job = CharField(index=True)
+
+    Handler = server.Model.PeeweeHandler
+
+    @server.rpc()
+    def hello(self):
+        return "Hello, {}!".format(self.name)
+
+```
+
+```
+for p in client.List(s.Person.where(job='foo')):
+    print(" Calling p.hello()", client.Call(p.hello()))
+
+```
+
+
+```
+client.Delete(s.Person.where(job='foo'))
+```

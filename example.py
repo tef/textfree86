@@ -86,14 +86,12 @@ def make_server():
             return server.Waiter(count=1)
 
         @wait.ready()
-        def wait(count):
+        def wait(self, count):
             if count < 1:
                 return self.name
             else:
                 return server.Waiter(count=count -1)
             
-
-
     return server.Server(n.app(), port=8888)
 
 def test():
@@ -145,6 +143,11 @@ def test():
 
         for j in client.List(s.Job):
             print(j)
+    
+        waiter = client.Call(j.wait())
+        print(waiter)
+        value = client.Wait(waiter)
+        print(value)
 
         print(client.Delete(job))
 

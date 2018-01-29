@@ -96,15 +96,19 @@ class RequestHandler:
         else:
             return obj()
 
-    def invoke_waiter(self, waiter, params):
+    def invoke_waiter(self, waiter, obj, params):
         params = {key: objects.parse(value) for key,value in params.items()}
         # if waiter is a fn
-        obj = waiter(**params)
+        if obj is None:
+            out = waiter(**params)
+        else:
+            out = waiter(obj, **params)
+
         # if waiter is a waiter, call.resolve()
 
-        if isinstance(obj, Waiter):
-            obj.from_resolve = True
-        return obj
+        if isinstance(out, Waiter):
+            out.from_resolve = True
+        return out
 
 class Embed:
     pass
@@ -136,7 +140,7 @@ class FunctionHandler(RequestHandler):
         path = path[len(self.name)+1:]
         if path == 'wait':
             if method == 'GET':
-                return self.invoke_waiter(self.fn.waiter, params)
+                return self.invoke_waiter(self.fn.waiter, None, params)
             else:
                 return MethodNotAllowed()
         elif path:
@@ -191,7 +195,7 @@ class Service:
                     if path[1] == 'wait':
                         if method != 'GET':
                             raise MethodNotAllowed()
-                        return self.invoke_waiter(fn.waiter, params)
+                        return self.invoke_waiter(fn.waiter, None, params)
                     else:
                         raise NotFound()
             
@@ -435,7 +439,7 @@ class Collection:
                     if subpath == 'wait':
                         if method != 'GET':
                             raise MethodNotAllowed()
-                        return self.invoke_waiter(fn.waiter, params)
+                        return self.invoke_waiter(fn.waiter, obj,  params)
                     else:
                         raise NotFound()
                 else:
