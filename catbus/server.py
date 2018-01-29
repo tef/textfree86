@@ -195,9 +195,19 @@ class Service:
             path = path[len(self.name)+1:].split('/')
             if path and path[0]:
                 obj_method = path[0]
+
                 if obj_method.startswith('_'): 
                     raise Forbidden()
+
                 fn = getattr(self.service, obj_method)
+
+                if len(path) > 1 and path[1]:
+                    if path[1] == 'wait':
+                        if method != 'GET':
+                            raise MethodNotAllowed()
+                        return self.invoke_future(fn.future, params)
+                    else:
+                        raise NotFound()
             
                 if method == 'GET':
                     return self.invoke(fn, params=params, safe=True)
@@ -259,19 +269,20 @@ class Token:
 
                 fn = getattr(obj, path)
 
-                if method == 'POST':
-                    return self.invoke(fn, args=data)
-                elif method == 'GET':
+                if method == 'GET':
                     return self.invoke(fn, safe=True)
+                elif method == 'POST':
+                    return self.invoke(fn, args=data)
                 else:
                     raise MethodNotAllowed()
             else:
                 if path:
                     raise NotImplemented()
-                if method == 'POST':
-                    return self.view(**data)
-                elif method == 'GET':
+
+                if method == 'GET':
                     return self.view
+                elif method == 'POST':
+                    return self.view(**data)
                 raise MethodNotAllowed()
 
         def lookup(self, params):
@@ -311,7 +322,21 @@ class Singleton:
             if path:
                 if path.startswith('_'): 
                     raise Forbidden()
+                if '/' in path:
+                    path, subpath = path.split('/',1)
+                else:
+                    subpath = None
+
                 fn = getattr(self.obj, path)
+                
+                if subpath:
+                    if subpath == 'wait':
+                        if method == 'GET':
+                            return self.invoke(fn.future, params)
+                        else:
+                            raise MethodNotAllowed()
+                    raise NotFound()
+
                 if method == 'GET':
                     return self.invoke(fn, params=params, safe=True)
                 elif method == 'POST':
@@ -415,6 +440,18 @@ class Collection:
                         return None
                     else:
                         raise MethodNotAllowed()
+                elif '/' in obj_method:
+                    obj_method, subpath = obj_method.split('/',1)
+
+                    obj = self.lookup(id)
+                    fn = getattr(obj, obj_method)
+
+                    if subpath == 'wait':
+                        if method != 'GET':
+                            raise MethodNotAllowed()
+                        return self.invoke_future(fn.future, params)
+                    else:
+                        raise NotFound()
                 else:
                     obj = self.lookup(id)
                     fn = getattr(obj, obj_method)
