@@ -11,6 +11,7 @@ _list = list
 
 import os
 import sys
+import time
 
 from urllib.parse import urljoin
 from collections import OrderedDict
@@ -122,8 +123,23 @@ class Client:
 
         return self.fetch(request)
 
-    def Wait(self, request):
-        raise Exception('no')
+    def Wait(self, request, poll_seconds=5):
+        if isinstance(request, RemoteWaiter):
+            request = request()
+        else:
+            request = unwrap_request('GET', request)
+
+        if request.method != 'GET':
+            raise Exception('mismatch')
+
+        obj = self.fetch(request)
+        while isinstance(obj, RemoteWaiter):
+            time.sleep(poll_seconds) # fixme
+            request = obj()
+            obj = self.fetch(request)
+        return obj
+
+
 
     def Watch(self, request):
         raise Exception('no')

@@ -138,16 +138,8 @@ def test():
 
         exp = client.Call(s.expensive(123))
 
-        print(exp)
-        print(exp.url)
-
-        exp = client.Get(exp.url)
-        print(exp, exp.url)
-        exp = client.Get(exp.url)
-        print(exp, exp.url)
-        exp = client.Get(exp.url)
-        print(exp, exp.url)
-        exp = client.Get(exp.url)
+        exp = client.Wait(exp, poll_seconds=0.5)
+        
         print(exp)
     finally:
         server_thread.stop()
