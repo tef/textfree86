@@ -50,7 +50,7 @@ class Client:
             request = unwrap_request('GET', request)
 
         if request.method != 'GET':
-            raise Exception('mismatch')
+            raise Exception(request.method)
 
         return self.fetch(request)
 
@@ -111,7 +111,10 @@ class Client:
     def Call(self, request, method=None, data=None):
         if isinstance(request, RemoteFunction):
             if method is None:
-                request = request(**data)
+                if data:
+                    request = request(**data)
+                else:
+                    request = request()
             else:
                 raise Exception('no')
         elif isinstance(request, RemoteObject):
@@ -151,6 +154,46 @@ class Client:
             raise Exception('mismatch')
         
         return self.fetch(request)
+
+    def navigate(self, obj, path):
+        for p in path[:-1]:
+            attr = getattr(obj, p)
+            obj = self.Get(attr())
+        return getattr(obj, path[-1])
+
+    def perform(self, action, request, arguments):
+        if action == "get":
+            return self.Get(request, **arguments)
+
+        if action == "set":
+            return self.Set(request, **arguments)
+
+        if action == "create":
+            return self.Create(request, **arguments)
+
+        if action == "update":
+            return self.Update(request, **arguments)
+
+        if action == "delete":
+            return self.Delete(request, **arguments)
+
+        if action == "list":
+            return self.List(request, **arguments)
+
+        if action == "call":
+            return self.Call(request, **arguments)
+
+        if action == "wait":
+            return self.Wait(request, **arguments)
+
+        if action == "watch":
+            return self.Watch(request, **arguments)
+
+        if action == "post":
+            return self.Post(request, **arguments)
+
+        raise Exception(action)
+
 
     def fetch(self, request):
         headers = OrderedDict(HEADERS)
@@ -250,7 +293,7 @@ class RemoteDataset:
         self.selectors = selectors
 
     def __str__(self):
-        return "<Link to {}>".format(self.url)
+        return "<Dataset to {}>".format(self.url)
 
     def __getitem__(self, name):
         return self.lookup(name)
@@ -397,7 +440,15 @@ class RemoteObject:
 
 def main(client, endpoint, args):
     service = client.Get(endpoint)
-    print(service)
+    # parse args, 
+    # verb path:path:path --arguments=... 
+    # extract global args
+    # - namespace, output format, endpoint etc
+    verb, path = args
+    path = path.split(':')
+    obj = client.navigate(service, path)
+    out = client.perform(verb, obj, {})
+    print(out)
     return -1
 
 client = Client()

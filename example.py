@@ -1,6 +1,7 @@
 from catbus import client, server
 
 import collections
+import sys
 from datetime import datetime, timezone
 
 def make_server():
@@ -29,6 +30,9 @@ def make_server():
     @n.add()
     class MyEndpoint(server.Service):
         # no self, all methods exposed.
+
+        def demo():
+            return "A nice demo"
 
         def rpc_one(a,b):
             return a+b
@@ -93,6 +97,17 @@ def make_server():
                 return server.Waiter(count=count -1)
             
     return server.Server(n.app(), port=8888)
+
+def run():
+    server_thread = make_server()
+    server_thread.start()
+
+    print("Running on ",server_thread.url)
+
+    try:
+        while True: pass
+    finally:
+        server_thread.stop()
 
 def test():
     server_thread = make_server()
@@ -162,4 +177,7 @@ def test():
 
 
 if __name__ == '__main__':
-    test()
+    if 'run' in sys.argv[1:]:
+        run()
+    else:
+        test()
