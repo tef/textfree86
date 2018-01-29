@@ -72,6 +72,7 @@ print(total)
 ## serving a class, and instances
 
 ```
+jobs = {}
 @n.add()
 class Job():
     Handler = server.Collection.dict_handler('name', jobs)
@@ -101,7 +102,7 @@ job = client.create(s.Job.create(name="helium"))
 for j in client.list(s.Job):
     client.call(j.stop())
 
-job = client.get(s.Job["helium"])
+job = client.get(s.Job, key="helium")
 client.delete(job)
 ```
 
