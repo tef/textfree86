@@ -81,6 +81,18 @@ def make_server():
         def hidden(self):
             return 'Not exposed over RPC'
 
+        @server.waiter()
+        def wait(self):
+            return server.Waiter(count=1)
+
+        @wait.ready()
+        def wait(count):
+            if count < 1:
+                return self.name
+            else:
+                return server.Waiter(count=count -1)
+            
+
 
     return server.Server(n.app(), port=8888)
 
