@@ -84,7 +84,7 @@ class Form(Hyperlink):
         self.defaults = defaults
 
 @registry.add()
-class Future(Hyperlink):
+class Waiter(Hyperlink):
     def __init__(self, metadata):
         self.metadata = metadata
 

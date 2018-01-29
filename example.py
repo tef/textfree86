@@ -15,19 +15,16 @@ def make_server():
         return echo
 
     @n.add()
-    @server.future()
+    @server.waiter()
     def expensive(value):
-        return server.Future(value=value,count=3)
+        return server.Waiter(value=value,count=3)
 
-    @expensive.resolve()
+    @expensive.ready()
     def expensive(value, count):
         if count > 0:
-            return server.Future(value=value, count=count-1)
+            return server.Waiter(value=value, count=count-1)
         else:
             return value
-    #@n.add()
-    #class MyFuture(server.Future):
-    #   pass
 
     @n.add()
     class MyEndpoint(server.Service):
@@ -85,21 +82,6 @@ def make_server():
             return 'Not exposed over RPC'
 
 
-    @n.add()
-    class Counter(server.Token):
-        # Tokens exist as /name?state urls, not stored on server
-        # re-creates a Counter with every request & calls methods
-        # before disposing it
-
-        def __init__(self, num=0):
-            self.num = num
-
-        def next(self):
-            return Counter(self.num+1)
-
-        def value(self):
-            return self.num
-
     return server.Server(n.app(), port=8888)
 
 def test():
@@ -133,14 +115,6 @@ def test():
 
         print(client.Call(e.now()))
 
-        counter = client.Call(s.Counter(10))
-        counter = client.Call(counter.next())
-        counter = client.Call(counter.next())
-        counter = client.Call(counter.next())
-        print(counter)
-        print('nice')
-        value = client.Post(counter.value())
-
         total = client.Call(s.Total())
 
         print(client.Call(total.total()))
@@ -151,7 +125,6 @@ def test():
 
         print(client.Call(total.total()))
 
-        print(value, counter.num)
 
         job = client.Create(s.Job,value=dict(name="butt"))
             # client.Call(s.Job.create(...))

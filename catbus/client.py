@@ -180,7 +180,7 @@ class Client:
                 return RemoteObject(obj.kind, url, obj)
             if isinstance(obj, objects.Service):
                 return RemoteObject(obj.kind, url, obj)
-            if isinstance(obj, objects.Future):
+            if isinstance(obj, objects.Waiter):
                 obj.metadata['url'] = url
 
             return obj

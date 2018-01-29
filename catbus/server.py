@@ -73,29 +73,19 @@ def rpc(safe=False):
     def _fn(fn):
         fn.rpc = True
         fn.safe = safe
-        fn.resolve = None
-        if future:
-            def _wait():
-                def _decorator(wait_fn):
-                    fn.wait = wait_fn
-                    return fn
-
-                return _decorator
-
-            fn.resolve = _wait
         return fn
     return _fn
 
-def future():
+def waiter():
     def _fn(fn):
         fn.rpc = True
-        fn.future = None
+        fn.waiter = None
         def _wait():
             def _decorator(wait_fn):
-                fn.future = wait_fn
+                fn.waiter = wait_fn
                 return fn
             return _decorator
-        fn.resolve = _wait
+        fn.ready = _wait
         return fn
     return _fn
 
@@ -106,20 +96,20 @@ class RequestHandler:
         else:
             return obj()
 
-    def invoke_future(self, future, params):
+    def invoke_waiter(self, waiter, params):
         params = {key: objects.parse(value) for key,value in params.items()}
-        # if future is a fn
-        obj = future(**params)
-        # if future is a future, call.resolve()
+        # if waiter is a fn
+        obj = waiter(**params)
+        # if waiter is a waiter, call.resolve()
 
-        if isinstance(obj, Future):
+        if isinstance(obj, Waiter):
             obj.from_resolve = True
         return obj
 
 class Embed:
     pass
     
-class Future(Embed):
+class Waiter(Embed):
     suffix = '/wait'
 
     def __init__(self, **args):
@@ -129,17 +119,13 @@ class Future(Embed):
     def embed(self, prefix, name):
         params = {key: objects.dump(value) for key, value in self.args.items()}
         if not self.from_resolve:
-            name = "{}{}".format(name,self.suffix) if not name.endswith(self.suffix) else name
+            name = "{}{}".format(name,self.suffix) 
         url = "{}{}?{}".format(prefix, name,urlencode(params))
         metadata = OrderedDict()
         metadata["url"] = url
-        return objects.Future(
+        return objects.Waiter(
             metadata = metadata,
         )
-
-class NamedFuture(Embed):
-    class Handler(RequestHandler):
-        pass
 
 class FunctionHandler(RequestHandler):
     def __init__(self, name, function):
@@ -150,7 +136,7 @@ class FunctionHandler(RequestHandler):
         path = path[len(self.name)+1:]
         if path == 'wait':
             if method == 'GET':
-                return self.invoke_future(self.fn.future, params)
+                return self.invoke_waiter(self.fn.waiter, params)
             else:
                 return MethodNotAllowed()
         elif path:
@@ -205,7 +191,7 @@ class Service:
                     if path[1] == 'wait':
                         if method != 'GET':
                             raise MethodNotAllowed()
-                        return self.invoke_future(fn.future, params)
+                        return self.invoke_waiter(fn.waiter, params)
                     else:
                         raise NotFound()
             
@@ -332,7 +318,7 @@ class Singleton:
                 if subpath:
                     if subpath == 'wait':
                         if method == 'GET':
-                            return self.invoke(fn.future, params)
+                            return self.invoke(fn.waiter, params)
                         else:
                             raise MethodNotAllowed()
                     raise NotFound()
@@ -449,7 +435,7 @@ class Collection:
                     if subpath == 'wait':
                         if method != 'GET':
                             raise MethodNotAllowed()
-                        return self.invoke_future(fn.future, params)
+                        return self.invoke_waiter(fn.waiter, params)
                     else:
                         raise NotFound()
                 else:
