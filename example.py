@@ -55,7 +55,7 @@ def make_server():
             self.sum = 0
 
         def add(self, n):
-            self.sum += n
+            self.sum += int(n)
             return self
         
         @server.rpc(safe=True)

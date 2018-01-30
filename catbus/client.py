@@ -436,16 +436,25 @@ class RemoteObject(Navigable):
         raise AttributeError('no')
 
 def main(client, endpoint, args):
-    service = client.Get(endpoint)
-    # parse args, 
-    # verb path:path:path --arguments=... 
-    # extract global args
-    # - namespace, output format, endpoint etc
     if args:
         path = args.pop(0).split(':')
     else:
         path = []
-    verb = args.pop(0) if args else "get"
+    verbs = set('get set create delete update list call exec tail log watch wait'.split())
+    if args and  args[0] in verbs:
+        verb = args.pop(0) 
+    else:
+        verb  = "get"
+    arguments = {}
+    while args:
+        arg = args[0]
+        if arg.startswith('--'):
+            a = args.pop(0)
+            key, value = a.split('=',1)
+            key = key[2:] 
+            arguments[key]=value
+        else:
+            break
 
     obj = client.Get(endpoint)
     if path:
@@ -454,7 +463,9 @@ def main(client, endpoint, args):
             attr = getattr(obj,p)
             obj = client.Get(attr())
         obj = getattr(obj,last)
-    out = client.perform(verb, obj, {})
+    if arguments:
+        obj = obj(**arguments)
+    out = client.perform(verb, obj,{})
     print(out)
     return -1
 
