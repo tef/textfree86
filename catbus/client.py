@@ -34,7 +34,18 @@ def unwrap_request(method, request, data=None):
     return objects.Request(method, request, {}, {}, data)
 
 class Navigable:
-    pass
+    def display(self):
+        return self
+
+    def perform(self, action):
+        attr = getattr(self, action.path)
+        verb = action.verb
+        if verb is None or verb == "get":
+            return attr()
+        elif verb in ('post', 'call'):
+            return attr(**dict(action.arguments))
+            
+        
 
 class CachedResult:
     def __init__(self, result):
@@ -125,7 +136,8 @@ class Client:
                 raise Exception('no')
             else:
                 request = getattr(request, method)(**data)
-        request = unwrap_request('POST', request, data)
+        else:
+            request = unwrap_request('POST', request, data)
 
         return self.fetch(request)
 
@@ -157,40 +169,6 @@ class Client:
             raise Exception('mismatch')
         
         return self.fetch(request)
-
-    def perform(self, action, request, arguments):
-        if action == "get":
-            return self.Get(request, **arguments)
-
-        if action == "set":
-            return self.Set(request, **arguments)
-
-        if action == "create":
-            return self.Create(request, **arguments)
-
-        if action == "update":
-            return self.Update(request, **arguments)
-
-        if action == "delete":
-            return self.Delete(request, **arguments)
-
-        if action == "list":
-            return self.List(request, **arguments)
-
-        if action == "call":
-            return self.Call(request, **arguments)
-
-        if action == "wait":
-            return self.Wait(request, **arguments)
-
-        if action == "watch":
-            return self.Watch(request, **arguments)
-
-        if action == "post":
-            return self.Post(request, **arguments)
-
-        raise Exception(action)
-
 
     def fetch(self, request):
         headers = OrderedDict(HEADERS)
@@ -435,45 +413,75 @@ class RemoteObject(Navigable):
             return RemoteFunction('POST', url, arguments)
         raise AttributeError('no')
 
-def main(client, endpoint, args):
-    if args:
-        path = args.pop(0).split(':')
+VERBS = set('get set create delete update list call exec tail log watch wait'.split())
+
+def parse_arguments(args):
+    if not args:
+        return [], []
+
+    actions = []
+    path = args.pop(0).split(':')
+    for p in path[:-1]:
+        actions.append(Action(p, 'get', None))
+
+    if not args:
+        actions.append(Action(path[-1], None, None))
+        return actions, []
     else:
-        path = []
-    verbs = set('get set create delete update list call exec tail log watch wait'.split())
-    if args and  args[0] in verbs:
+        path = path[-1]
+
+    if args[0] in VERBS:
         verb = args.pop(0) 
     else:
-        verb  = "get"
-    arguments = {}
+        verb = None
+
+    arguments = []
     while args:
         arg = args[0]
-        if arg.startswith('--'):
-            a = args.pop(0)
-            key, value = a.split('=',1)
-            key = key[2:] 
-            arguments[key]=value
-        else:
+        if arg in VERBS:
             break
+        arg = args.pop(0)
+        if arg.startswith('--'):
+            key, value = arg[2:].split('=',1)
+            arguments.append((key, value))
+        else:
+            arguments.append(arg)
+
+    actions.append(Action(path, verb, arguments))
+    return actions, args
+
+def display(obj):
+    if isinstance(obj, Navigable):
+        obj = obj.display()
+    print(obj)
+
+class Action:
+    def __init__(self, path, verb, arguments):
+        self.path = path
+        self.verb = verb
+        self.arguments = arguments
+
+
+def cli(client, endpoint, args):
+
+    actions, args = parse_arguments(args)
 
     obj = client.Get(endpoint)
-    if path:
-        last = path.pop()
-        for p in path:
-            attr = getattr(obj,p)
-            obj = client.Get(attr())
-        obj = getattr(obj,last)
-    if arguments:
-        obj = obj(**arguments)
-    out = client.perform(verb, obj,{})
-    print(out)
+
+    for action in actions:
+        if isinstance(obj, Navigable):
+            request = obj.perform(action)
+        else:
+            raise Exception('no')
+        obj = client.Call(request)
+    display(obj)
     return -1
 
 client = Client()
 
 if __name__ == '__main__':
     endpoint = os.environ['CATBUS_URL']
-    sys.exit(main(client, endpoint, sys.argv[1:]))
+    sys.exit(cli(client, endpoint, sys.argv[1:]))
     
 
 Get = client.Get
