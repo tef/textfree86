@@ -33,6 +33,9 @@ def unwrap_request(method, request, data=None):
 
     return objects.Request(method, request, {}, {}, data)
 
+class Navigable:
+    pass
+
 class CachedResult:
     def __init__(self, result):
         self.result = result
@@ -155,12 +158,6 @@ class Client:
         
         return self.fetch(request)
 
-    def navigate(self, obj, path):
-        for p in path[:-1]:
-            attr = getattr(obj, p)
-            obj = self.Get(attr())
-        return getattr(obj, path[-1])
-
     def perform(self, action, request, arguments):
         if action == "get":
             return self.Get(request, **arguments)
@@ -248,7 +245,7 @@ class Client:
 
         return obj
 
-class RemoteWaiter:
+class RemoteWaiter(Navigable):
     def __init__(self, obj, url):
         self.url = url
         self.obj = obj
@@ -259,7 +256,7 @@ class RemoteWaiter:
     def __call__(self, *args, **kwargs):
         return objects.Request('GET', self.url, {}, {}, None)
 
-class RemoteFunction:
+class RemoteFunction(Navigable):
     def __init__(self, method, url, arguments, defaults=()):
         self.method = method
         self.url = url
@@ -285,7 +282,7 @@ class RemoteFunction:
                     data[key] = self.defaults
         return objects.Request('POST', self.url, {}, {}, data)
 
-class RemoteDataset:
+class RemoteDataset(Navigable):
     def __init__(self, kind, url, obj, selectors=()):
         self.kind = kind
         self.url = url
@@ -382,7 +379,7 @@ class RemoteDataset:
         return RemoteDataset(self.kind, self.url, self.obj, new_selectors)
 
 
-class RemoteList:
+class RemoteList(Navigable):
     def __init__(self,kind, base_url, obj):
         self.base_url = base_url
         self.kind = kind
@@ -409,7 +406,7 @@ class RemoteList:
     # contains
     # next()
 
-class RemoteObject:
+class RemoteObject(Navigable):
     def __init__(self,kind, url, obj):
         self.kind = kind
         self.url = url
@@ -444,9 +441,19 @@ def main(client, endpoint, args):
     # verb path:path:path --arguments=... 
     # extract global args
     # - namespace, output format, endpoint etc
-    verb, path = args
-    path = path.split(':')
-    obj = client.navigate(service, path)
+    if args:
+        path = args.pop(0).split(':')
+    else:
+        path = []
+    verb = args.pop(0) if args else "get"
+
+    obj = client.Get(endpoint)
+    if path:
+        last = path.pop()
+        for p in path:
+            attr = getattr(obj,p)
+            obj = client.Get(attr())
+        obj = getattr(obj,last)
     out = client.perform(verb, obj, {})
     print(out)
     return -1
