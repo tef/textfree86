@@ -40,7 +40,13 @@ class Navigable:
     def perform(self, action):
         attr = getattr(self, action.path)
         verb = action.verb
-        if verb is None or verb == "get":
+        if verb is None:
+            if action.arguments:
+                verb = 'call'
+            else:
+                verb = 'get'
+
+        if verb == "get":
             return attr()
         elif verb in ('post', 'call'):
             return attr(**dict(action.arguments))
@@ -420,40 +426,40 @@ def parse_arguments(args):
         return [], []
 
     actions = []
-    path = args.pop(0).split(':')
-    for p in path[:-1]:
-        actions.append(Action(p, 'get', None))
-
-    if not args:
-        actions.append(Action(path[-1], None, None))
-        return actions, []
-    else:
-        path = path[-1]
-
-    if args[0] in VERBS:
-        verb = args.pop(0) 
-    else:
-        verb = None
-
-    arguments = []
     while args:
-        arg = args[0]
-        if arg in VERBS:
-            break
-        arg = args.pop(0)
-        if arg.startswith('--'):
-            key, value = arg[2:].split('=',1)
-            arguments.append((key, value))
+        if args[0] in VERBS:
+            verb = args.pop(0) 
         else:
-            arguments.append(arg)
+            verb = None
+    
+        if not args:
+            raise Exception('missing')
 
-    actions.append(Action(path, verb, arguments))
-    return actions, args
+        path = args.pop(0).split(':')
+        for p in path[:-1]:
+            if p: actions.append(Action(p, None, None))
 
-def display(obj):
-    if isinstance(obj, Navigable):
-        obj = obj.display()
-    print(obj)
+        if not args:
+            actions.append(Action(path[-1], verb, []))
+            return actions
+        else:
+            path = path[-1]
+
+
+        arguments = []
+        while args:
+            arg = args[0]
+            if arg in VERBS:
+                break
+            arg = args.pop(0)
+            if arg.startswith('--'):
+                key, value = arg[2:].split('=',1)
+                arguments.append((key, value))
+            else:
+                arguments.append(arg)
+
+        actions.append(Action(path, verb, arguments))
+    return actions
 
 class Action:
     def __init__(self, path, verb, arguments):
@@ -461,10 +467,9 @@ class Action:
         self.verb = verb
         self.arguments = arguments
 
-
 def cli(client, endpoint, args):
 
-    actions, args = parse_arguments(args)
+    actions = parse_arguments(args)
 
     obj = client.Get(endpoint)
 
@@ -474,7 +479,9 @@ def cli(client, endpoint, args):
         else:
             raise Exception('no')
         obj = client.Call(request)
-    display(obj)
+    if isinstance(obj, Navigable):
+        obj = obj.display()
+    print(obj)
     return -1
 
 client = Client()
