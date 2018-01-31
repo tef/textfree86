@@ -233,6 +233,7 @@ class Service:
             return objects.Service(
                 kind = self.service.__name__,
                 metadata = metadata,
+                attributes = {},
             )
 
 class Token:
@@ -681,7 +682,7 @@ class Namespace:
             attrs = OrderedDict()
             for name,o in self.handlers.items():
                 attrs[name] = o.link(prefix=self.prefix)
-            self.service = objects.Resource('Index',
+            self.service = objects.Service('Index',
                 metadata={'url':self.prefix},
                 attributes=attrs,
             )

@@ -8,6 +8,15 @@ from urllib.parse import urljoin
 
 from .rson import Codec, reserved_tags, CONTENT_TYPE
 
+class ServiceError:
+    pass
+
+class MethodNotAllowed:
+    pass
+
+class Forbidden:
+    pass
+
 class Registry:
     def __init__(self):
         self.classes = OrderedDict()
@@ -104,9 +113,10 @@ class Dataset(Hyperlink):
 
 @registry.add()
 class Service(Hyperlink):
-    def __init__(self, kind, metadata):
+    def __init__(self, kind, metadata, attributes):
         self.kind = kind
-        self.metadata = OrderedDict(metadata)
+        self.metadata = metadata
+        self.attributes = attributes
 
     @property
     def url(self):
