@@ -210,7 +210,7 @@ class Codec:
                         pos = m.end()
                 elif peek != '}':
                     raise ParserErr(
-                        buf, pos, "Expecting a ',', or a '}' but found {}".format(repr(peek)))
+                        buf, pos, "Expecting a ',', or a '{}' but found {}".format('{}',repr(peek)))
             if name not in (None, 'object', 'record', 'dict'):
                 out = self.tagged_to_object(name,  out)
             if transform is not None:
@@ -519,7 +519,7 @@ class Codec:
             buf.write('"')
             for c in obj:
                 if c in escaped:
-                    buf.write(escaped)
+                    buf.write(escaped[c])
                 elif ord(c) < 0x20:
                     buf.write('\\x{:02X}'.format(ord(c)))
                 else:
