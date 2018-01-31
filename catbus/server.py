@@ -136,7 +136,8 @@ class FunctionHandler(RequestHandler):
         self.fn = function
         self.name = name
 
-    def on_request(self, method, path, params, data):
+    def on_request(self, context, request):
+        method, path, params, data = request.method, request.url, request.params, request.data
         path = path[len(self.name)+1:]
         if path == 'wait':
             if method == 'GET':
@@ -181,7 +182,8 @@ class Service:
             self.service = service
             self.name = name
 
-        def on_request(self, method, path, params, data):
+        def on_request(self, context, request):
+            method, path, params, data = request.method, request.url, request.params, request.data
             path = path[len(self.name)+1:].split('/')
             if path and path[0]:
                 obj_method = path[0]
@@ -243,7 +245,8 @@ class Token:
             self.view = view
             self.name = name
 
-        def on_request(self, method, path, params, data):
+        def on_request(self, context, request):
+            method, path, params, data = request.method, request.url, request.params, request.data
             path = path[len(self.name)+1:]
             if path.startswith('_'): 
                 raise Forbidden()
@@ -308,7 +311,8 @@ class Singleton:
             self.name = name
             self.obj = self.cls()
 
-        def on_request(self, method, path, params, data):
+        def on_request(self, context, request):
+            method, path, params, data = request.method, request.url, request.params, request.data
             path = path[len(self.name)+1:]
             if path:
                 if path.startswith('_'): 
@@ -408,7 +412,8 @@ class Collection:
             self.cls = cls
             self.name = name
 
-        def on_request(self, method, path, params, data):
+        def on_request(self, context, request):
+            method, path, params, data = request.method, request.url, request.params, request.data
             col_method, path = path[len(self.name)+1:], None
 
             if '/' in col_method:
@@ -705,7 +710,16 @@ class Namespace:
 
                 params = request.args
 
-                out = self.handlers[name].on_request(request.method, path, params, args)
+                context = {}
+                request = objects.Request(
+                    method=request.method,
+                    url=path,
+                    params=params, 
+                    headers={},
+                    data=args,
+                )
+
+                out = self.handlers[name].on_request(context, request)
             else:
                 raise NotFound(path)
         
