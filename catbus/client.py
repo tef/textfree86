@@ -475,8 +475,14 @@ def cli(client, endpoint, args):
         if isinstance(obj, Navigable):
             request = obj.perform(action)
         else:
+            if action.verb == None:
+                break
             raise Exception('no')
         obj = client.Call(request)
+
+    if isinstance(obj, RemoteWaiter):
+        obj  = client.Wait(obj)
+
     if isinstance(obj, Navigable):
         obj = obj.display()
     print(obj)
