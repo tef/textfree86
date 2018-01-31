@@ -338,10 +338,9 @@ class RemoteDataset(Navigable):
         for name, value in kwargs.items():
             if name not in names:
                 raise Exception('no')
-            new_selectors.append(OrderedDict(
+            new_selectors.append(objects.Operator.Equals(
                 key=name,
-                operator="Equals",
-                values=value,
+                value=value,
             ))
 
         return RemoteDataset(self.kind, self.url, self.obj, new_selectors)
@@ -354,10 +353,9 @@ class RemoteDataset(Navigable):
         for name, value in kwargs.items():
             if name not in names:
                 raise Exception('no')
-            new_selectors.append(OrderedDict(
+            new_selectors.append(objects.Operator.NotEquals(
                 key=name,
-                operator="NotEquals",
-                values=value
+                value=value
         ))
         
         return RemoteDataset(self.kind, self.url, self.obj, new_selectors)

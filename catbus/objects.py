@@ -164,6 +164,48 @@ class Response:
         self.status = status
         self.headers = headers
         self.data = data
+class Operator:
+    ops = Registry()
+    class Operator:
+        def __init__(self, key, value):
+            self.key = key
+            self.value = value
+
+    @ops.add()
+    class Equals(Operator):pass
+
+    @ops.add()
+    class NotEquals(Operator):pass
+
+    @ops.add()
+    class LessThan(Operator):pass
+
+    @ops.add()
+    class GreaterThan(Operator):pass
+
+    @ops.add()
+    class LessEqualTo(Operator):pass
+
+    @ops.add()
+    class GreaterEqualTo(Operator):pass
+
+    @ops.add()
+    class In(Operator):pass
+
+    @ops.add()
+    class NotIn(Operator):pass
+
+    @ops.add()
+    class Exists:
+        def __init__(self, key): self.key = key
+
+    @ops.add()
+    class NotExists:
+        def __init__(self, key): self.key = key
+
+    @ops.add()
+    class All:pass
+
 
 
 def parse(obj, transform=None):
@@ -174,28 +216,9 @@ def dump(obj, transform=None):
 
 
 def parse_selector(string):
-    output = []
-    if string == "*":
-        return None
-
-    for piece in string.split(","):
-        key, operator, values = piece.strip().split()
-        operator = {
-                '==':'Equals',
-                '!=':'NotEquals',
-        }[operator]
-        output.append(dict(key=key, operator=operator, values=values))
-    return output
+    if string is None or string == "*": return None
+    return Operator.ops.parse(string, transform=None)
 
 def dump_selector(selectors):
-    output = []
-
-    for s in selectors:
-        key, operator, values = s['key'], s['operator'], s['values']
-        operator = {
-                'Equals':'==',
-                'NotEquals':'!=',
-        }[operator]
-        output.append("{} {} {}".format(key, operator, values))
-
-    return ",".join(output)
+    if selectors is None: return "*"
+    return Operator.ops.dump(selectors, transform=None)

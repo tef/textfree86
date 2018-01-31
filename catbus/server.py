@@ -461,7 +461,7 @@ class Collection:
 
             elif col_method =='list':
                 if method == 'GET':
-                    selector = params.get('where','*')
+                    selector = params.get('where',None)
                     limit = params.get('limit')
                     next = params.get('continue')
                     if limit:
@@ -615,11 +615,12 @@ class Model:
 
         def select_on(self, items, selector):
             for s in selector:
-                key, operator, values = s['key'], s['operator'], s['values']
+                print(selector,s)
+                key, operator, values = s.key, s.__class__, s.value
                 field = self.fields[key]
-                if operator == 'Equals':
+                if operator == objects.Operator.Equals:
                     items = items.where(field == values)
-                elif operator == 'NotEquals':
+                elif operator == objects.Operator.NotEquals:
                     items = items.where(field != values)
                 else:
                     raise Exception('unsupported')
@@ -647,7 +648,7 @@ class Model:
 
             return Collection.List(
                 name=self.name, 
-                selector=selector,
+                selector=objects.dump_selector(selector),
                 items=items,
                 next=next_token
             )
