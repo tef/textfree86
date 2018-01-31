@@ -8,6 +8,13 @@ from urllib.parse import urljoin
 
 from .rson import Codec, reserved_tags, CONTENT_TYPE
 
+import werkzeug.exceptions as wz
+
+class NotFound(wz.NotFound): pass
+class Forbidden(wz.Forbidden): pass
+class NotImplemented(wz.NotImplemented): pass
+class MethodNotAllowed(wz.MethodNotAllowed): pass
+
 class ServiceError:
     pass
 

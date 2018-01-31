@@ -17,7 +17,7 @@ from wsgiref.simple_server import make_server, WSGIRequestHandler
 
 from werkzeug.utils import redirect as Redirect
 from werkzeug.wrappers import Request, Response
-from werkzeug.exceptions import HTTPException, Forbidden, NotFound, BadRequest, NotImplemented, MethodNotAllowed
+from werkzeug.exceptions import HTTPException
 
 from . import objects
 
@@ -91,9 +91,14 @@ def waiter():
 
 class RequestHandler:
     def invoke(self, obj, args=None, params=None, safe=False):
-        if args:
-            return obj(**args)
+        if not safe:
+            if args:
+                return obj(**args)
+            else:
+                return obj()
         else:
+            if not obj.safe:
+                raise objects.MethodNotAllowed()
             return obj()
 
     def invoke_waiter(self, waiter, obj, params):
@@ -145,13 +150,13 @@ class FunctionHandler(RequestHandler):
             else:
                 return MethodNotAllowed()
         elif path:
-            raise NotFound()
+            raise objects.NotFound()
 
         if method == 'GET':
             return self.invoke(self.fn, safe=True)
         elif method == 'POST':
             return self.invoke(self.fn, args=data)
-        raise MethodNotAllowed()
+        raise objects.MethodNotAllowed()
 
     def url(self, prefix):
         return prefix+self.name
@@ -189,30 +194,30 @@ class Service:
                 obj_method = path[0]
 
                 if obj_method.startswith('_'): 
-                    raise Forbidden()
+                    raise objects.Forbidden()
 
                 fn = getattr(self.service, obj_method)
 
                 if len(path) > 1 and path[1]:
                     if path[1] == 'wait':
                         if method != 'GET':
-                            raise MethodNotAllowed()
+                            raise objects.MethodNotAllowed()
                         return self.invoke_waiter(fn.waiter, None, params)
                     else:
-                        raise NotFound()
+                        raise objects.NotFound()
             
                 if method == 'GET':
                     return self.invoke(fn, params=params, safe=True)
                 elif method == 'POST':
                     return self.invoke(fn, args=data)
                 else:
-                    raise MethodNotAllowed()
+                    raise objects.MethodNotAllowed()
 
             else:
                 if method == 'GET':
                     return self.service()
                 else:
-                    raise MethodNotAllowed()
+                    raise objects.MethodNotAllowed()
 
         def url(self, prefix):
             return prefix+self.name
@@ -249,9 +254,9 @@ class Token:
             method, path, params, data = request.method, request.url, request.params, request.data
             path = path[len(self.name)+1:]
             if path.startswith('_'): 
-                raise Forbidden()
+                raise objects.Forbidden()
             if '/' in path:
-                raise NotFound()
+                raise objects.NotFound()
 
             if params:
                 obj =  self.lookup(params)
@@ -259,7 +264,7 @@ class Token:
                 if not path:
                     if method == 'GET':
                         return obj
-                    raise MethodNotAllowed()
+                    raise objects.MethodNotAllowed()
 
                 fn = getattr(obj, path)
 
@@ -268,16 +273,16 @@ class Token:
                 elif method == 'POST':
                     return self.invoke(fn, args=data)
                 else:
-                    raise MethodNotAllowed()
+                    raise objects.MethodNotAllowed()
             else:
                 if path:
-                    raise NotImplemented()
+                    raise objects.NotImplemented()
 
                 if method == 'GET':
                     return self.view
                 elif method == 'POST':
                     return self.view(**data)
-                raise MethodNotAllowed()
+                raise objects.MethodNotAllowed()
 
         def lookup(self, params):
             params = {key: objects.parse(value) for key,value in params.items() if not key.startswith('_')}
@@ -316,7 +321,7 @@ class Singleton:
             path = path[len(self.name)+1:]
             if path:
                 if path.startswith('_'): 
-                    raise Forbidden()
+                    raise objects.Forbidden()
                 if '/' in path:
                     path, subpath = path.split('/',1)
                 else:
@@ -329,20 +334,20 @@ class Singleton:
                         if method == 'GET':
                             return self.invoke(fn.waiter, params)
                         else:
-                            raise MethodNotAllowed()
-                    raise NotFound()
+                            raise objects.MethodNotAllowed()
+                    raise objects.NotFound()
 
                 if method == 'GET':
                     return self.invoke(fn, params=params, safe=True)
                 elif method == 'POST':
                     return self.invoke(fn, args=data)
                 else:
-                    raise MethodNotAllowed()
+                    raise objects.MethodNotAllowed()
             else:
                 if method == 'GET':
                     return self.obj
                 else:
-                    raise MethodNotAllowed()
+                    raise objects.MethodNotAllowed()
 
         def url(self, prefix):
             return prefix + self.name
@@ -426,7 +431,7 @@ class Collection:
                     id, obj_method = path, None
 
                 if obj_method and obj_method.startswith('_'):
-                    raise Forbidden()
+                    raise objects.Forbidden()
                 
                 if not obj_method:
                     if method == 'GET':
@@ -435,7 +440,7 @@ class Collection:
                         self.delete(id)
                         return None
                     else:
-                        raise MethodNotAllowed()
+                        raise objects.MethodNotAllowed()
                 elif '/' in obj_method:
                     obj_method, subpath = obj_method.split('/',1)
 
@@ -447,7 +452,7 @@ class Collection:
                             raise MethodNotAllowed()
                         return self.invoke_waiter(fn.waiter, obj,  params)
                     else:
-                        raise NotFound()
+                        raise objects.NotFound()
                 else:
                     obj = self.lookup(id)
                     fn = getattr(obj, obj_method)
@@ -457,7 +462,7 @@ class Collection:
                     elif method == 'POST':
                         return self.invoke(fn, data)
                     else:
-                        raise MethodNotAllowed()
+                        raise objects.MethodNotAllowed()
 
             elif col_method =='list':
                 if method == 'GET':
@@ -474,21 +479,21 @@ class Collection:
                     self.delete_list(selector)
                     return
                 else:
-                    raise MethodNotAllowed()
+                    raise objects.MethodNotAllowed()
             elif col_method == 'new':
                 if method != 'POST':
-                    raise MethodNotAllowed()
+                    raise objects.MethodNotAllowed()
                 return self.create(data)
             elif col_method == 'delete':
                 if method != 'POST':
-                    raise MethodNotAllowed()
+                    raise objects.MethodNotAllowed()
                 return self.delete(path)
             elif col_method == '':
                 if method != 'GET':
-                    raise MethodNotAllowed()
+                    raise objects.MethodNotAllowed()
                 return self.cls
 
-            raise NotImplelmented(method)
+            raise objects.NotImplelmented(method)
 
         def url(self, prefix):
             return prefix+self.name
@@ -722,7 +727,7 @@ class Namespace:
 
                 out = self.handlers[name].on_request(context, request)
             else:
-                raise NotFound(path)
+                raise objects.NotFound(path)
         
         def transform(o):
             if isinstance(o, type) or isinstance(o, types.FunctionType):
