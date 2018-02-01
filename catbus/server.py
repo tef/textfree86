@@ -90,6 +90,9 @@ def waiter():
     return _fn
 
 class RequestHandler:
+    def subtypes(self):
+        return ()
+
     def invoke(self, obj, args=None, params=None, safe=False):
         if not safe:
             if args:
@@ -168,7 +171,10 @@ class FunctionHandler(RequestHandler):
             return objects.Form(self.url(prefix), arguments=funcargs(self.fn))
 
     def embed(self, prefix, o=None):
-        return self.link(prefix)
+        if o is None or o is self.fn:
+            return self.link(prefix)
+        else:
+            Exception('bad embed')
 
 
 class Service:
@@ -186,6 +192,19 @@ class Service:
         def __init__(self, name, service):
             self.service = service
             self.name = name
+            self.for_type = {}
+            self.for_name = {}
+            for name, method in service.__dict__.items():
+                if isinstance(method, Service):
+                    handler = method.Handler(name, method)
+                    self.for_name[name] = handler
+                    self.for_type[method] = handler
+                elif isinstance(method, types.FunctionType):
+                    handler = FunctionHandler(name, method)
+                    self.for_type[method] = handler
+
+        def subtypes(self):
+            return self.for_type.keys()
 
         def on_request(self, context, request):
             method, path, params, data = request.method, request.url, request.params, request.data
@@ -226,6 +245,10 @@ class Service:
             return objects.Link(self.url(prefix))
 
         def embed(self,prefix, o=None):
+            if isinstance(o, type) or isinstance(o, types.FunctionType):
+                new_prefix = "{}/".format(self.url(prefix))
+                return self.for_type[o].embed(new_prefix, o)
+
             if o is None or o is self.service:
                 return self.link(prefix)
 
@@ -688,6 +711,8 @@ class Namespace:
 
         self.for_path[n] = handler
         self.for_type[obj] = handler
+        for cls in handler.subtypes():
+            self.for_type[cls] = handler
         self.service = None
 
     def index(self):

@@ -30,6 +30,9 @@ def make_server():
     @n.add()
     class MyEndpoint(server.Service):
         # no self, all methods exposed.
+        def which_demo(name):
+            if name =='one':
+                return MyEndpoint.demo
 
         def demo():
             return "A nice demo"
@@ -129,9 +132,14 @@ def test():
         x = client.Call(test(x=1))
         print(x)
 
+
         print(s.MyEndpoint())
         e = client.Get(s.MyEndpoint())
 
+        demo = client.Call(e.which_demo("one"))
+        print('it',demo)
+
+        print(client.Call(demo()))
         print(client.Call(e.rpc_one(1,2)))
 
         print(client.Call(e.rpc_two(3,b=4)))
