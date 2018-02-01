@@ -660,8 +660,8 @@ class Model:
 
 class Namespace:
     def __init__(self, name=""):
-        self.handlers = OrderedDict()
-        self.paths = OrderedDict()
+        self.for_path = OrderedDict()
+        self.for_type = OrderedDict()
         self.service = None
         if name:
             prefix="/{}/".format(name)
@@ -686,14 +686,14 @@ class Namespace:
         n = obj.__name__ if name is None else name
         handler = handler(n, obj)
 
-        self.handlers[n] = handler
-        self.paths[obj] = handler
+        self.for_path[n] = handler
+        self.for_type[obj] = handler
         self.service = None
 
     def index(self):
         if self.service is None:
             attrs = OrderedDict()
-            for name,o in self.handlers.items():
+            for name,o in self.for_path.items():
                 attrs[name] = o.link(prefix=self.prefix)
             self.service = objects.Service('Index',
                 metadata={'url':self.prefix},
@@ -709,7 +709,7 @@ class Namespace:
             p = len(self.prefix)
             path = path[p:]
             name = path.split('/',1)[0].split('.',1)[0]
-            if name in self.handlers:
+            if name in self.for_path:
                 data  = request.data.decode('utf-8')
                 if data:
                     args = objects.parse(data)
@@ -727,16 +727,16 @@ class Namespace:
                     data=args,
                 )
 
-                out = self.handlers[name].on_request(context, request)
+                out = self.for_path[name].on_request(context, request)
             else:
                 raise objects.NotFound(path)
         
         def transform(o):
             if isinstance(o, type) or isinstance(o, types.FunctionType):
-                if o in self.paths:
-                    return self.paths[o].embed(self.prefix, o)
-            elif o.__class__ in self.paths:
-                return self.paths[o.__class__].embed(self.prefix, o)
+                if o in self.for_type:
+                    return self.for_type[o].embed(self.prefix, o)
+            elif o.__class__ in self.for_type:
+                return self.for_type[o.__class__].embed(self.prefix, o)
             elif isinstance(o, Embed):
                 return o.embed(self.prefix, path)
             return o
