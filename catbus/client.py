@@ -393,12 +393,24 @@ class RemoteObject(Navigable):
         self.kind = kind
         self.url = url
         self.obj = obj
-        self.links = obj.metadata.get('links')
+        self.links = obj.metadata.get('links', [])
         self.attributes = getattr(obj, 'attributes', {})
-        self.methods = obj.metadata.get('methods')
+        self.methods = obj.metadata.get('methods', {})
 
     def __str__(self):
         return "<{} at {}>".format(self.kind, self.url)
+
+    def display(self):
+        return """
+    url: {}
+    links: {}
+    methods: {}
+    attributes: {}
+""".format(self.url,
+        ", ".join(self.links),
+        ", ".join(self.methods.keys()),
+        ", ".join("{!r}:{!r}".format(k,v) for k,v in self.attributes.items())
+    )
 
     def __getattr__(self, name):
         if name in self.attributes:
@@ -474,6 +486,7 @@ def cli(client, endpoint, args):
     for action in actions[:-1]:
         if isinstance(obj, Navigable):
             request = obj.perform(action)
+            print(request.url)
         else:
             raise Exception('can\'t navigate to {}'.format(action.path))
         obj = client.Call(request)
@@ -482,6 +495,7 @@ def cli(client, endpoint, args):
         action = actions[-1]
         if isinstance(obj, Navigable):
             request = obj.perform(action)
+            print(request.url)
             obj = client.Call(request)
 
     if isinstance(obj, RemoteWaiter):

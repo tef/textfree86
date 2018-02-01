@@ -52,6 +52,7 @@ def extract_methods(cls):
     for k,v in cls.__dict__.items():
         if not getattr(v, 'rpc', all_methods): continue
         if k.startswith('_'): continue
+        if isinstance(v, type) or not isinstance(v, types.FunctionType): continue
 
         if getattr(v, 'safe', False):
             links.append(k)
@@ -195,12 +196,13 @@ class Service:
             self.for_type = {}
             self.for_name = {}
             for name, method in service.__dict__.items():
-                if isinstance(method, Service):
+                if isinstance(method, type) and issubclass(method, Service):
                     handler = method.Handler(name, method)
                     self.for_name[name] = handler
                     self.for_type[method] = handler
                 elif isinstance(method, types.FunctionType):
                     handler = FunctionHandler(name, method)
+                    self.for_name[name] = handler
                     self.for_type[method] = handler
 
         def subtypes(self):
@@ -208,30 +210,18 @@ class Service:
 
         def on_request(self, context, request):
             method, path, params, data = request.method, request.url, request.params, request.data
-            path = path[len(self.name)+1:].split('/')
+            path = path[len(self.name)+1:].split('/',1)
             if path and path[0]:
                 obj_method = path[0]
 
                 if obj_method.startswith('_'): 
                     raise objects.Forbidden()
 
-                fn = getattr(self.service, obj_method)
-
-                if len(path) > 1 and path[1]:
-                    if path[1] == 'wait':
-                        if method != 'GET':
-                            raise objects.MethodNotAllowed()
-                        return self.invoke_waiter(fn.waiter, None, params)
-                    else:
-                        raise objects.NotFound()
-            
-                if method == 'GET':
-                    return self.invoke(fn, params=params, safe=True)
-                elif method == 'POST':
-                    return self.invoke(fn, args=data)
+                if obj_method in self.for_name:
+                    r = objects.Request(method, "/".join(path), params, request.headers, data)
+                    return self.for_name[obj_method].on_request(context, r)
                 else:
-                    raise objects.MethodNotAllowed()
-
+                    raise objects.NotFound()
             else:
                 if method == 'GET':
                     return self.service()
@@ -245,14 +235,22 @@ class Service:
             return objects.Link(self.url(prefix))
 
         def embed(self,prefix, o=None):
-            if isinstance(o, type) or isinstance(o, types.FunctionType):
-                new_prefix = "{}/".format(self.url(prefix))
-                return self.for_type[o].embed(new_prefix, o)
-
+            sub_prefix = "{}/".format(self.url(prefix))
             if o is None or o is self.service:
                 return self.link(prefix)
+            elif o in self.for_type:
+                return self.for_type[o].embed(sub_prefix, o)
+            elif not isinstance(o, (type, types.FunctionType)) and o.__class__ in self.for_type:
+                return self.for_type[o.__class__].embed(sub_prefix, o)
+
+
 
             links, methods = extract_methods(self.service)
+            attributes = {}
+            for name, handler in self.for_name.items():
+                if name in links: continue
+                if name in methods: continue
+                attributes[name] = handler.link(sub_prefix)
 
             metadata = OrderedDict(
                 url = self.url(prefix),
@@ -263,7 +261,7 @@ class Service:
             return objects.Service(
                 kind = self.service.__name__,
                 metadata = metadata,
-                attributes = {},
+                attributes = attributes,
             )
 
 class Token:
@@ -643,7 +641,6 @@ class Model:
 
         def select_on(self, items, selector):
             for s in selector:
-                print(selector,s)
                 key, operator, values = s.key, s.__class__, s.value
                 field = self.fields[key]
                 if operator == objects.Operator.Equals:

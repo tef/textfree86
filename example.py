@@ -16,23 +16,27 @@ def make_server():
         return echo
 
     @n.add()
-    @server.waiter()
-    def expensive(value):
-        return server.Waiter(value=value,count=3)
-
-    @expensive.ready()
-    def expensive(value, count):
-        if count > 0:
-            return server.Waiter(value=value, count=count-1)
-        else:
-            return value
-
-    @n.add()
     class MyEndpoint(server.Service):
         # no self, all methods exposed.
         def which_demo(name):
             if name =='one':
                 return MyEndpoint.demo
+
+        class Two(server.Service):
+            def test():
+                return "nice"
+
+            @server.waiter()
+            def expensive(value):
+                return server.Waiter(value=value,count=3)
+
+            @expensive.ready()
+            def expensive(value, count):
+                if count > 0:
+                    return server.Waiter(value=value, count=count-1)
+                else:
+                    return value
+
 
         def demo():
             return "A nice demo"
@@ -174,7 +178,9 @@ def test():
 
         print(client.Delete(job))
 
-        exp = client.Call(s.expensive(123))
+        two = client.Get(e.Two())
+        
+        exp = client.Call(two.expensive(123))
 
         exp = client.Wait(exp, poll_seconds=0.5)
         
