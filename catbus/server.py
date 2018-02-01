@@ -177,6 +177,41 @@ class FunctionHandler(RequestHandler):
         else:
             Exception('bad embed')
 
+class MethodHandler(RequestHandler):
+    def __init__(self, name, cls, method):
+        self.cls = cls
+        self.name = name
+        self.method = method
+
+    def on_request(self, context, request):
+        method, path, params, data = request.method, request.url, request.params, request.data
+        
+        obj = context[self.cls.__name__]
+        fn = getattr(obj, self.name)
+
+        path = path[len(self.name)+1:]
+        if path == 'wait':
+            if method == 'GET':
+                return self.invoke_waiter(fn.waiter, None, params)
+            else:
+                return MethodNotAllowed()
+        elif path:
+            raise objects.NotFound()
+
+        if method == 'GET':
+            return self.invoke(fn, safe=True)
+        elif method == 'POST':
+            return self.invoke(fn, args=data)
+        raise objects.MethodNotAllowed()
+
+    def url(self, prefix):
+        return prefix+self.name
+
+    def link(self, prefix):
+        if getattr(self.method, 'safe', False):
+            return objects.Link(self.url(prefix))
+        else:
+            return objects.Form(self.url(prefix), arguments=funcargs(self.method))
 
 class Service:
     rpc = True
@@ -206,7 +241,11 @@ class Service:
                     self.for_type[method] = handler
 
         def subtypes(self):
-            return self.for_type.keys()
+            s = []
+            for cls, handler in self.for_type.items():
+                s.append(cls)
+                s.extend(handler.subtypes())
+            return s
 
         def on_request(self, context, request):
             method, path, params, data = request.method, request.url, request.params, request.data
@@ -337,33 +376,40 @@ class Singleton:
             self.name = name
             self.obj = self.cls()
 
+            self.for_type = {}
+            self.for_name = {}
+            for name, method in cls.__dict__.items():
+                if isinstance(method, type) and issubclass(method, Service):
+                    handler = method.Handler(name, method)
+                    self.for_name[name] = handler
+                    self.for_type[method] = handler
+                elif isinstance(method, types.FunctionType):
+                    handler = MethodHandler(name, cls, method)
+                    self.for_name[name] = handler
+                    self.for_type[method] = handler
+
+        def subtypes(self):
+            s = []
+            for cls, handler in self.for_type.items():
+                s.append(cls)
+                s.extend(handler.subtypes())
+            return s
+
         def on_request(self, context, request):
             method, path, params, data = request.method, request.url, request.params, request.data
             path = path[len(self.name)+1:]
             if path:
                 if path.startswith('_'): 
                     raise objects.Forbidden()
-                if '/' in path:
-                    path, subpath = path.split('/',1)
-                else:
-                    subpath = None
+                paths = path.split('/',1)
 
-                fn = getattr(self.obj, path)
-                
-                if subpath:
-                    if subpath == 'wait':
-                        if method == 'GET':
-                            return self.invoke(fn.waiter, params)
-                        else:
-                            raise objects.MethodNotAllowed()
+                if paths[0] in self.for_name:
+                    r = objects.Request(method, path, params, request.headers, data)
+                    context = dict(context)
+                    context[self.name] = self.obj
+                    return self.for_name[paths[0]].on_request(context, r)
+                else:
                     raise objects.NotFound()
-
-                if method == 'GET':
-                    return self.invoke(fn, params=params, safe=True)
-                elif method == 'POST':
-                    return self.invoke(fn, args=data)
-                else:
-                    raise objects.MethodNotAllowed()
             else:
                 if method == 'GET':
                     return self.obj
@@ -377,9 +423,16 @@ class Singleton:
             return objects.Link(self.url(prefix))
 
         def embed(self,prefix, o):
+            sub_prefix = "{}/".format(self.url(prefix))
             if o is None or o is self.cls:
                 return self.link(prefix)
-            return make_resource(o, self.url(prefix))
+            elif o is self.obj:
+                return make_resource(o, self.url(prefix))
+            elif o in self.for_type:
+                return self.for_type[o].embed(sub_prefix, o)
+            elif getattr(o,'__class__', None) in self.for_type:
+                return self.for_type[o.__class__].embed(sub_prefix, o)
+            raise Exception('bad handler')
 
 class Collection:
     class List(Embed):
@@ -681,6 +734,7 @@ class Model:
 class Namespace:
     def __init__(self, name=""):
         self.for_path = OrderedDict()
+
         self.for_type = OrderedDict()
         self.service = None
         if name:
@@ -708,6 +762,7 @@ class Namespace:
 
         self.for_path[n] = handler
         self.for_type[obj] = handler
+
         for cls in handler.subtypes():
             self.for_type[cls] = handler
         self.service = None
