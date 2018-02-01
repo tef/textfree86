@@ -471,14 +471,18 @@ def cli(client, endpoint, args):
 
     obj = client.Get(endpoint)
 
-    for action in actions:
+    for action in actions[:-1]:
         if isinstance(obj, Navigable):
             request = obj.perform(action)
         else:
-            if action.verb == None:
-                break
-            raise Exception('no')
+            raise Exception('can\'t navigate to {}'.format(action.path))
         obj = client.Call(request)
+
+    if actions:
+        action = actions[-1]
+        if isinstance(obj, Navigable):
+            request = obj.perform(action)
+            obj = client.Call(request)
 
     if isinstance(obj, RemoteWaiter):
         obj  = client.Wait(obj)

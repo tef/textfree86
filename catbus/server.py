@@ -684,8 +684,10 @@ class Namespace:
 
     def add_handler(self, name, handler, obj):
         n = obj.__name__ if name is None else name
-        self.handlers[n] = handler(n, obj)
-        self.paths[obj]=n
+        handler = handler(n, obj)
+
+        self.handlers[n] = handler
+        self.paths[obj] = handler
         self.service = None
 
     def index(self):
@@ -732,9 +734,9 @@ class Namespace:
         def transform(o):
             if isinstance(o, type) or isinstance(o, types.FunctionType):
                 if o in self.paths:
-                    return self.handlers[self.paths[o]].embed(self.prefix, o)
+                    return self.paths[o].embed(self.prefix, o)
             elif o.__class__ in self.paths:
-                return self.handlers[self.paths[o.__class__]].embed(self.prefix, o)
+                return self.paths[o.__class__].embed(self.prefix, o)
             elif isinstance(o, Embed):
                 return o.embed(self.prefix, path)
             return o

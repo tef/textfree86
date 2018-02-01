@@ -161,7 +161,7 @@ def test():
     
         waiter = client.Call(j.wait())
         print(waiter)
-        value = client.Wait(waiter)
+        value = client.Wait(waiter, poll_seconds=0.1)
         print(value)
 
         print(client.Delete(job))
