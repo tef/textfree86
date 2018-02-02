@@ -493,11 +493,13 @@ def cli(client, endpoint, args):
 
     if actions:
         action = actions[-1]
-        if isinstance(obj, Navigable):
+        attr = getattr(obj, action.path)
+        if isinstance(attr, Navigable):
             request = obj.perform(action)
             print(request.url)
             obj = client.Call(request)
-
+        elif not action.verb:
+            obj = attr
     if isinstance(obj, RemoteWaiter):
         obj  = client.Wait(obj)
 

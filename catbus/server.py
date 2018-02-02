@@ -279,6 +279,8 @@ class Service:
                 return self.link(prefix)
             elif o in self.for_type:
                 return self.for_type[o].embed(sub_prefix, o)
+            elif hasattr(o, '__self__') and o.__self__ in self.for_type:
+                return self.for_type[o.__self__].embed(sub_prefix, o)
             elif not isinstance(o, (type, types.FunctionType)) and o.__class__ in self.for_type:
                 return self.for_type[o.__class__].embed(sub_prefix, o)
 
@@ -810,8 +812,9 @@ class Namespace:
         
         def transform(o):
             if isinstance(o, type) or isinstance(o, types.FunctionType):
-                if o in self.for_type:
-                    return self.for_type[o].embed(self.prefix, o)
+                return self.for_type[o].embed(self.prefix, o)
+            elif isinstance(o, types.MethodType):
+                return self.for_type[o.__self__].embed(self.prefix, o)
             elif o.__class__ in self.for_type:
                 return self.for_type[o.__class__].embed(self.prefix, o)
             elif isinstance(o, Embed):
