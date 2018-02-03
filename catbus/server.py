@@ -90,10 +90,15 @@ def waiter():
         return fn
     return _fn
 
-class RequestHandler:
-    def wrap(self):
-        return self
 
+class Embed:
+    pass
+
+class Nesting:
+    pass
+
+
+class RequestHandler:
     def subtypes(self):
         return ()
 
@@ -132,6 +137,7 @@ class NestedHandler(RequestHandler):
         self.add_nested_handlers()
 
     def add_nested_handlers(self):
+
         pass
 
     def subpath(self, path):
@@ -168,7 +174,6 @@ class NestedHandler(RequestHandler):
         return self.for_path[subpath].on_request(context, request)
 
     def add_nested_handler(self, name, cls, handler):
-        handler = handler(name, cls)
         self.for_path[name] = handler
         self.for_type[cls] = handler
         for t in handler.subtypes():
@@ -190,9 +195,6 @@ class NestedHandler(RequestHandler):
 
     def handle_embed(self, prefix, obj):
         pass
-
-class Embed:
-    pass
     
 class Waiter(Embed):
     suffix = '/wait'
@@ -299,10 +301,12 @@ class Service:
     class Handler(NestedHandler):
         def add_nested_handlers(self):
             for name, method in self.cls.__dict__.items():
-                if isinstance(method, type) and issubclass(method, Service):
-                    self.add_nested_handler(name, method, method.Handler)
+                if isinstance(method, type) and hasattr(method, 'Handler'):
+                    handler = method.Handler(name, method)
+                    self.add_nested_handler(name, method, handler)
                 elif isinstance(method, types.FunctionType):
-                    self.add_nested_handler(name, method, FunctionHandler)
+                    handler = FunctionHandler(name, method)
+                    self.add_nested_handler(name, method, handler)
 
         def handle_request(self, context, request):
             if request.method == 'GET':
@@ -339,6 +343,50 @@ class Service:
                 metadata = metadata,
                 attributes = attributes,
             )
+
+class Singleton:
+    rpc = True
+
+    def __init__(self):
+        pass
+
+    class Handler(NestedHandler):
+        def __init__(self, name, cls):
+            NestedHandler.__init__(self, name, cls)
+            self.obj = self.cls()
+
+        def add_nested_handlers(self):
+            for name, method in self.cls.__dict__.items():
+                if isinstance(method, type) and hasattr(method, 'Handler'):
+                    handler = method.Handler(name, method)
+                    self.add_nested_handler(name, method, handler)
+                elif isinstance(method, types.FunctionType):
+                    handler = MethodHandler(name, self.name, method)
+                    self.add_nested_handler(name, method, handler)
+
+        def handle_request(self, context, request):
+            if request.method == 'GET':
+                return self.obj
+            else:
+                raise objects.MethodNotAllowed()
+        
+        def nested_request(self, path, context, request):
+            context[self.name] = self.obj
+            return NestedHandler.nested_request(self, path, context, request)
+
+        def url(self, prefix):
+            return prefix + self.name
+
+        def link(self, prefix):
+            return objects.Link(self.url(prefix))
+
+        def handle_embed(self,prefix, o):
+            sub_prefix = "{}/".format(self.url(prefix))
+            if o is None or o is self.cls:
+                return self.link(prefix)
+            elif o is self.obj:
+                return make_resource(o, self.url(prefix))
+            raise Exception('bad handler')
 
 class Token:
     rpc = True
@@ -400,78 +448,6 @@ class Token:
             url = "{}?{}".format(self.url(prefix), urlencode(params))
 
             return make_resource(o, url)
-
-class Singleton:
-    rpc = True
-
-    def __init__(self):
-        pass
-
-    class Handler(RequestHandler):
-        def __init__(self, name, cls):
-            self.cls = cls
-            self.name = name
-            self.obj = self.cls()
-
-            self.for_type = {}
-            self.for_name = {}
-            for name, method in cls.__dict__.items():
-                if isinstance(method, type) and issubclass(method, Service):
-                    handler = method.Handler(name, method)
-                    self.for_name[name] = handler
-                    self.for_type[method] = handler
-                elif isinstance(method, types.FunctionType):
-                    handler = MethodHandler(name, self.name, method)
-                    self.for_name[name] = handler
-                    self.for_type[method] = handler
-                else:
-                    continue
-                for t in handler.subtypes():
-                    self.for_type[t] = handler
-
-        def subtypes(self):
-            return self.for_type.keys()
-
-        def on_request(self, context, request):
-            method, path, params, data = request.method, request.url, request.params, request.data
-            path = path[len(self.name)+1:]
-            if path:
-                if path.startswith('_'): 
-                    raise objects.Forbidden()
-                paths = path.split('/',1)
-
-                if paths[0] in self.for_name:
-                    r = objects.Request(method, path, params, request.headers, data)
-                    context = dict(context)
-                    context[self.name] = self.obj
-                    return self.for_name[paths[0]].on_request(context, r)
-                else:
-                    raise objects.NotFound()
-            else:
-                if method == 'GET':
-                    return self.obj
-                else:
-                    raise objects.MethodNotAllowed()
-
-        def url(self, prefix):
-            return prefix + self.name
-
-        def link(self, prefix):
-            return objects.Link(self.url(prefix))
-
-        def embed(self,prefix, o):
-            sub_prefix = "{}/".format(self.url(prefix))
-            if o is None or o is self.cls:
-                return self.link(prefix)
-            elif o is self.obj:
-                return make_resource(o, self.url(prefix))
-            elif o in self.for_type:
-                return self.for_type[o].embed(sub_prefix, o)
-            elif getattr(o,'__self__', None) in self.for_type:
-                return self.for_type[o.__self__].embed(sub_prefix, o)
-            elif getattr(o,'__class__', None) in self.for_type:
-                return self.for_type[o.__class__].embed(sub_prefix, o)
-            raise Exception('bad handler')
 
 class Collection:
     class List(Embed):
