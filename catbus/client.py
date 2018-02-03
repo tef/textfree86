@@ -14,7 +14,6 @@ import sys
 import time
 
 from urllib.parse import urljoin
-from collections import OrderedDict
 
 import requests
 
@@ -177,7 +176,7 @@ class Client:
         return self.fetch(request)
 
     def fetch(self, request):
-        headers = OrderedDict(HEADERS)
+        headers = dict(HEADERS)
         if request.headers:
             headers.update(request.headers)
         
@@ -254,7 +253,7 @@ class RemoteFunction(Navigable):
         if self.method == 'GET':
             return objects.Request('GET', self.url, {}, {}, None)
 
-        data = OrderedDict()
+        data = dict()
         for key, value in zip(self.arguments, args):
             data[key] = value
             if key in kwargs:
@@ -289,7 +288,7 @@ class RemoteDataset(Navigable):
     def create(self, *args, **kwargs):
         url = "{}/new".format(self.url)
         arguments = self.obj.metadata['new']
-        data = OrderedDict()
+        data = dict()
         for key, value in zip(arguments, args):
             data[key] = value
             if key in kwargs:
@@ -302,7 +301,7 @@ class RemoteDataset(Navigable):
         return objects.Request('DELETE', url, {}, {}, None)
 
     def get_params(self, selector, batch):
-        params = OrderedDict()
+        params = dict()
         if selector and self.selectors:
             raise Exception('no')
         if selector:
@@ -369,7 +368,7 @@ class RemoteList(Navigable):
 
     def next(self, batch):
         if self.obj.metadata['continue']:
-            params = OrderedDict()
+            params = dict()
             url = urljoin(self.base_url, self.obj.metadata['collection'])
             #url = "{}/list".format(url)
             params['selector'] = self.obj.metadata['selector']

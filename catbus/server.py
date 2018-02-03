@@ -11,7 +11,6 @@ import sys
 import inspect
 import uuid
 
-from collections import OrderedDict
 from urllib.parse import urljoin, urlencode
 from wsgiref.simple_server import make_server, WSGIRequestHandler
 
@@ -33,7 +32,7 @@ def make_resource(obj, url):
     links, methods = extract_methods(cls)
     attributes = extract_attributes(obj)
 
-    metadata = OrderedDict(
+    metadata = dict(
         url = url,
         links = links,
         methods = methods,
@@ -48,7 +47,7 @@ def make_resource(obj, url):
 def extract_methods(cls):
     links = []
     all_methods = getattr(cls, 'rpc', False)
-    methods = OrderedDict()
+    methods = dict()
     for k,v in cls.__dict__.items():
         if not getattr(v, 'rpc', all_methods): continue
         if k.startswith('_'): continue
@@ -61,7 +60,7 @@ def extract_methods(cls):
     return links, methods
 
 def extract_attributes(obj):
-    attributes = OrderedDict()
+    attributes = dict()
     for k,v in obj.__dict__.items():
         if k.startswith('_'): continue
         
@@ -208,7 +207,7 @@ class Waiter(Embed):
         if not self.from_resolve:
             name = "{}{}".format(name,self.suffix) 
         url = "{}{}?{}".format(prefix, name,urlencode(params))
-        metadata = OrderedDict()
+        metadata = dict()
         metadata["url"] = url
         return objects.Waiter(
             metadata = metadata,
@@ -332,7 +331,7 @@ class Service:
                 if name in methods: continue
                 attributes[name] = handler.link(sub_prefix)
 
-            metadata = OrderedDict(
+            metadata = dict(
                 url = self.url(prefix),
                 links = links,
                 methods = methods,
@@ -459,7 +458,7 @@ class Collection:
             self.next = next
 
         def embed(self, prefix, name):
-            metadata = OrderedDict()
+            metadata = dict()
             metadata["collection"] = "{}{}{}".format(prefix, self.name, self.suffix)
             metadata["selector"] = self.selector
             metadata["continue"] = self.next
@@ -471,7 +470,7 @@ class Collection:
             )
     def dict_handler(name, d=None):
         if d is None:
-            d = OrderedDict()
+            d = dict()
         class Handler(Collection.Handler):
             items = d
             key = name
@@ -588,7 +587,7 @@ class Collection:
             return prefix+self.name
 
         def link(self, prefix):
-            metadata = OrderedDict(
+            metadata = dict(
                 url = self.url(prefix),
                 new=self.create_args(),
                 list=self.selector_args(),
@@ -615,7 +614,7 @@ class Collection:
 
             attributes = self.extract_attributes(o)
 
-            metadata = OrderedDict(
+            metadata = dict(
                 id = self.key_for(o),
                 collection = self.url(prefix),
                 url = url,
@@ -680,7 +679,7 @@ class Model:
             return self.indexes
 
         def extract_attributes(self, obj):
-            attr = OrderedDict()
+            attr = dict()
             for name in self.fields:
                 a = getattr(obj, name)
                 if isinstance(a, uuid.UUID):
@@ -750,9 +749,9 @@ class Model:
 
 class Namespace:
     def __init__(self, name=""):
-        self.for_path = OrderedDict()
+        self.for_path = dict()
 
-        self.for_type = OrderedDict()
+        self.for_type = dict()
         self.service = None
         if name:
             prefix="/{}/".format(name)
@@ -786,7 +785,7 @@ class Namespace:
 
     def index(self):
         if self.service is None:
-            attrs = OrderedDict()
+            attrs = dict()
             for name,o in self.for_path.items():
                 attrs[name] = o.link(prefix=self.prefix)
             self.service = objects.Service('Index',

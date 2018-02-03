@@ -3,7 +3,6 @@
 registry of objects sent/recieved on the wire. 
 """
 
-from collections import OrderedDict
 from urllib.parse import urljoin
 
 from .rson import Codec, reserved_tags, CONTENT_TYPE
@@ -21,8 +20,8 @@ class MethodNotAllowed(wz.MethodNotAllowed):
 
 class Registry:
     def __init__(self):
-        self.classes = OrderedDict()
-        self.tag_for = OrderedDict()
+        self.classes = dict()
+        self.tag_for = dict()
         self.codec = Codec(self.as_tagged, self.from_tagged)
         self.content_type = self.codec.content_type
 
@@ -48,7 +47,7 @@ class Registry:
             return obj.name, obj.value
         elif obj.__class__ in self.tag_for:
             name = self.tag_for[obj.__class__]
-            return name, OrderedDict(obj.__dict__)
+            return name, dict(obj.__dict__)
         else:
             raise InvalidTag('unknown',
                 "Can't find tag for object {}: unknown class {}".format(obj, obj.__class__))
@@ -130,14 +129,14 @@ class List(Hyperlink):
     def __init__(self, kind, metadata, items):
         self.kind = kind
         self.items = items
-        self.metadata = OrderedDict(metadata)
+        self.metadata = metadata
 
 @registry.add()
 class Resource(Hyperlink):
     def __init__(self, kind, metadata, attributes):
         self.kind = kind
         self.attributes = attributes
-        self.metadata = OrderedDict(metadata)
+        self.metadata = metadata
 
     @property
     def url(self):

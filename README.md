@@ -1,5 +1,7 @@
 # catbus, a client-server framework
 
+(Python 3.6+)
+
 "why have protocols when you have to write a new client for each service"
 
 catbus is a client-server framework for RPC, CRUD, and Socket-like APIs, with a reusable client.
