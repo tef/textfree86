@@ -35,7 +35,6 @@ def unwrap_request(method, request, data=None):
 class Navigable:
     def display(self):
         return self
-
     def perform(self, action):
         attr = getattr(self, action.path)
         verb = action.verb
@@ -52,21 +51,28 @@ class Navigable:
             
         
 
-class CachedResult:
+class CachedResult(Navigable):
     def __init__(self, result):
         self.result = result
+        self.url = "<cached>"
 
 class Client:
     def __init__(self):
         self.session=requests.session()
 
     def Get(self, request, key=None):
+        if isinstance(request, CachedResult):
+            return request.result
+        
         if key and isinstance(request, RemoteDataset):
             request = request.lookup(key)
         elif key:
             raise Exception('first argument not a dataset/collection')
         else:
             request = unwrap_request('GET', request)
+
+        if isinstance(request, CachedResult):
+            return request.result
 
         if request.method != 'GET':
             raise Exception(request.method)
@@ -128,6 +134,8 @@ class Client:
                 yield x
     
     def Call(self, request, method=None, data=None):
+        if isinstance(request, CachedResult):
+            return request.result
         if isinstance(request, RemoteFunction):
             if method is None:
                 if data:
@@ -143,6 +151,11 @@ class Client:
                 request = getattr(request, method)(**data)
         else:
             request = unwrap_request('POST', request, data)
+
+        if isinstance(request, CachedResult):
+            return request.result
+        else:
+            print(request)
 
         return self.fetch(request)
 
@@ -240,17 +253,20 @@ class RemoteWaiter(Navigable):
         return objects.Request('GET', self.url, {}, {}, None)
 
 class RemoteFunction(Navigable):
-    def __init__(self, method, url, arguments, defaults=()):
+    def __init__(self, method, url, arguments, defaults=(), cached=None):
         self.method = method
         self.url = url
         self.arguments = arguments
         self.defaults = defaults
+        self.cached = cached
 
     def __str__(self):
         return "<Link to {}>".format(self.url)
 
     def __call__(self, *args, **kwargs):
         if self.method == 'GET':
+            if self.cached:
+                return CachedResult(self.cached)
             return objects.Request('GET', self.url, {}, {}, None)
 
         data = dict()
@@ -425,7 +441,7 @@ class RemoteObject(Navigable):
             url = '{}/{}'.format(self.url, name)
 
         if self.links and name in self.links:
-            return RemoteFunction('GET', url, ())
+            return RemoteFunction('GET', url, (), cached=self.embeds.get(name))
         elif self.methods:
             arguments = self.methods[name]
             return RemoteFunction('POST', url, arguments)

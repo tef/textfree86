@@ -101,6 +101,9 @@ class RequestHandler:
     def subtypes(self):
         return ()
 
+    def inline(self, prefix):
+        return None
+
     def invoke(self, obj, args=None, params=None, safe=False):
         if not safe:
             if args:
@@ -319,6 +322,9 @@ class Service:
         def link(self, prefix):
             return objects.Link(self.url(prefix))
 
+        def inline(self, prefix):
+            return self.handle_embed(prefix, self.cls())
+
         def handle_embed(self,prefix, o):
             sub_prefix = "{}/".format(self.url(prefix))
             if o is None or o is self.cls:
@@ -330,7 +336,8 @@ class Service:
             for name, handler in self.for_path.items():
                 if name in links: continue
                 if name in methods: continue
-                embeds[name] = handler.link(sub_prefix)
+                inline = handler.inline(sub_prefix)
+                if inline: embeds[name] = inline
                 links.append(name)
 
             metadata = dict(
