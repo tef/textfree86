@@ -395,6 +395,7 @@ class RemoteObject(Navigable):
         self.links = obj.metadata.get('links', [])
         self.attributes = getattr(obj, 'attributes', {})
         self.methods = obj.metadata.get('methods', {})
+        self.embeds = obj.metadata.get('embeds', {})
 
     def __str__(self):
         return "<{} at {}>".format(self.kind, self.url)
@@ -404,11 +405,13 @@ class RemoteObject(Navigable):
     url: {}
     links: {}
     methods: {}
+    embeds: {}
     attributes: {}
 """.format(self.url,
         ", ".join(self.links),
         ", ".join(self.methods.keys()),
-        ", ".join("{!r}:{!r}".format(k,v) for k,v in self.attributes.items())
+        ", ".join("{!r}:{!r}".format(k,v) for k,v in self.embeds.items()),
+        ", ".join("{!r}:{!r}".format(k,v) for k,v in self.attributes.items()),
     )
 
     def __getattr__(self, name):
@@ -432,7 +435,7 @@ VERBS = set('get set create delete update list call exec tail log watch wait'.sp
 
 def parse_arguments(args):
     if not args:
-        return [], []
+        return []
 
     actions = []
     while args:

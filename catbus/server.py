@@ -326,15 +326,18 @@ class Service:
 
             links, methods = extract_methods(self.cls)
             attributes = {}
+            embeds = {}
             for name, handler in self.for_path.items():
                 if name in links: continue
                 if name in methods: continue
-                attributes[name] = handler.link(sub_prefix)
+                embeds[name] = handler.link(sub_prefix)
+                links.append(name)
 
             metadata = dict(
                 url = self.url(prefix),
                 links = links,
                 methods = methods,
+                embeds = embeds,
             )
 
             return objects.Service(
@@ -383,9 +386,30 @@ class Singleton:
             sub_prefix = "{}/".format(self.url(prefix))
             if o is None or o is self.cls:
                 return self.link(prefix)
-            elif o is self.obj:
-                return make_resource(o, self.url(prefix))
-            raise Exception('bad handler')
+            elif not o is self.obj:
+                raise Exception('bad handler')
+
+            links, methods = extract_methods(self.cls)
+            attributes = extract_attributes(self.obj)
+            embeds = {}
+            for name, handler in self.for_path.items():
+                if name in links: continue
+                if name in methods: continue
+                embeds[name] = handler.link(sub_prefix)
+                links.append(name)
+
+            metadata = dict(
+                url = self.url(prefix),
+                links = links,
+                methods = methods,
+                embeds = embeds,
+            )
+
+            return objects.Service(
+                kind = self.cls.__name__,
+                metadata = metadata,
+                attributes = attributes,
+            )
 
 class Token:
     rpc = True
