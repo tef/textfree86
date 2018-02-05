@@ -29,13 +29,13 @@ def funcargs(m):
 def make_resource(obj, url):
     cls = obj.__class__
 
-    links, methods = extract_methods(cls)
+    links, actions = extract_actions(cls)
     attributes = extract_attributes(obj)
 
     metadata = dict(
         url = url,
         links = links,
-        methods = methods,
+        actions = actions,
     )
 
     return objects.Resource(
@@ -44,10 +44,10 @@ def make_resource(obj, url):
         attributes = attributes,
     )
 
-def extract_methods(cls):
+def extract_actions(cls):
     links = []
     all_methods = getattr(cls, 'rpc', False)
-    methods = dict()
+    actions = dict()
     for k,v in cls.__dict__.items():
         if not getattr(v, 'rpc', all_methods): continue
         if k.startswith('_'): continue
@@ -56,8 +56,8 @@ def extract_methods(cls):
         if getattr(v, 'safe', False):
             links.append(k)
         else:
-            methods[k] = funcargs(v)
-    return links, methods
+            actions[k] = funcargs(v)
+    return links, actions
 
 def extract_attributes(obj):
     attributes = dict()
@@ -330,12 +330,12 @@ class Service:
             if o is None or o is self.cls:
                 return self.link(prefix)
 
-            links, methods = extract_methods(self.cls)
+            links, actions = extract_actions(self.cls)
             attributes = {}
             embeds = {}
             for name, handler in self.for_path.items():
                 if name in links: continue
-                if name in methods: continue
+                if name in actions: continue
                 inline = handler.inline(sub_prefix)
                 if inline: embeds[name] = inline
                 links.append(name)
@@ -343,7 +343,7 @@ class Service:
             metadata = dict(
                 url = self.url(prefix),
                 links = links,
-                methods = methods,
+                actions = actions,
                 embeds = embeds,
             )
 
@@ -389,6 +389,9 @@ class Singleton:
         def link(self, prefix):
             return objects.Link(self.url(prefix))
 
+        def inline(self, prefix):
+            return self.handle_embed(prefix, self.obj)
+
         def handle_embed(self,prefix, o):
             sub_prefix = "{}/".format(self.url(prefix))
             if o is None or o is self.cls:
@@ -396,19 +399,19 @@ class Singleton:
             elif not o is self.obj:
                 raise Exception('bad handler')
 
-            links, methods = extract_methods(self.cls)
+            links, actions = extract_actions(self.cls)
             attributes = extract_attributes(self.obj)
             embeds = {}
             for name, handler in self.for_path.items():
                 if name in links: continue
-                if name in methods: continue
+                if name in actions: continue
                 embeds[name] = handler.link(sub_prefix)
                 links.append(name)
 
             metadata = dict(
                 url = self.url(prefix),
                 links = links,
-                methods = methods,
+                actions = actions,
                 embeds = embeds,
             )
 
@@ -641,7 +644,7 @@ class Collection:
 
             url = self.url_for(prefix, o)
 
-            links, methods = self.extract_methods(self.cls)
+            links, actions = self.extract_actions(self.cls)
 
             attributes = self.extract_attributes(o)
 
@@ -650,7 +653,7 @@ class Collection:
                 collection = self.url(prefix),
                 url = url,
                 links = links,
-                methods = methods,
+                actions = actions,
             )
 
             return objects.Resource(
@@ -659,8 +662,8 @@ class Collection:
                 attributes = attributes,
             )
 
-        def extract_methods(self, obj):
-            return extract_methods(obj)
+        def extract_actions(self, obj):
+            return extract_actions(obj)
 
         def extract_attributes(self, obj):
             return extract_attributes(obj)
@@ -816,12 +819,20 @@ class Namespace:
 
     def index(self):
         if self.service is None:
-            attrs = dict()
+            actions = dict()
+            links = []
+            embeds = {}
             for name,o in self.for_path.items():
-                attrs[name] = o.link(prefix=self.prefix)
+                inline = o.inline(self.prefix)
+                if inline is not None:
+                    links.append(name)
+                    embeds[name] = inline
+                else:
+                    actions[name] = o.link(prefix=self.prefix)
+
             self.service = objects.Service('Index',
-                metadata={'url':self.prefix},
-                attributes=attrs,
+                metadata={'url':self.prefix,'links':links, 'embeds':embeds, 'actions':actions},
+                attributes={},
             )
         return self.service
 

@@ -410,7 +410,7 @@ class RemoteObject(Navigable):
         self.obj = obj
         self.links = obj.metadata.get('links', [])
         self.attributes = getattr(obj, 'attributes', {})
-        self.methods = obj.metadata.get('methods', {})
+        self.actions = obj.metadata.get('actions', {})
         self.embeds = obj.metadata.get('embeds', {})
 
     def __str__(self):
@@ -420,12 +420,12 @@ class RemoteObject(Navigable):
         return """
     url: {}
     links: {}
-    methods: {}
+    actions: {}
     embeds: {}
     attributes: {}
 """.format(self.url,
         ", ".join(self.links),
-        ", ".join(self.methods.keys()),
+        ", ".join(self.actions.keys()),
         ", ".join("{!r}:{!r}".format(k,v) for k,v in self.embeds.items()),
         ", ".join("{!r}:{!r}".format(k,v) for k,v in self.attributes.items()),
     )
@@ -442,9 +442,12 @@ class RemoteObject(Navigable):
 
         if self.links and name in self.links:
             return RemoteFunction('GET', url, (), cached=self.embeds.get(name))
-        elif self.methods:
-            arguments = self.methods[name]
-            return RemoteFunction('POST', url, arguments)
+        elif self.actions:
+            arguments = self.actions[name]
+            if isinstance(arguments, Navigable):
+                return arguments
+            elif isinstance(arguments, (tuple, list)):
+                return RemoteFunction('POST', url, arguments)
         raise AttributeError('no')
 
 VERBS = set('get set create delete update list call exec tail log watch wait'.split())
