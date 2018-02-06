@@ -41,6 +41,8 @@ class Navigable:
         if verb is None:
             if action.arguments:
                 verb = 'call'
+            elif getattr(attr, 'arguments', None):
+                raise Exception('Missing args {}'.format(attr.arguments))
             else:
                 verb = 'get'
 
@@ -279,6 +281,8 @@ class RemoteFunction(Navigable):
             if key not in data:
                 if key in self.defaults:
                     data[key] = self.defaults
+                else:
+                    raise Exception('missing arg: {}'.format(key))
         return objects.Request('POST', self.url, {}, {}, data)
 
 class RemoteDataset(Navigable):
@@ -485,12 +489,27 @@ def parse_arguments(args):
             arg = args.pop(0)
             if arg.startswith('--'):
                 key, value = arg[2:].split('=',1)
+                value = try_num(value)
                 arguments.append((key, value))
             else:
                 arguments.append(arg)
 
         actions.append(Action(path, verb, arguments))
     return actions
+
+def try_num(num):
+    try:
+        f = float(num)
+        n = str(f)
+        if num == n:
+            return f
+        i = int(num)
+        n = str(i)
+        if num == n:
+            return i
+        return num
+    except:
+        return num
 
 class Action:
     def __init__(self, path, verb, arguments):
