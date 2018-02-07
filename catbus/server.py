@@ -781,7 +781,7 @@ class Model:
 
 
 
-class Namespace:
+class Registry:
     def __init__(self, name=""):
         self.for_path = dict()
 

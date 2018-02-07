@@ -9,9 +9,9 @@ from peewee import *
 
 db = SqliteDatabase('people.db')
 
-namespace = server.Namespace()
+registry = server.Registry()
 
-@namespace.add()
+@registry.add()
 class Person(Model):
     class Meta: database = db
 
@@ -29,7 +29,7 @@ def test():
     db.connect()
     db.create_tables([Person], safe=True)
 
-    server_thread = server.Server(namespace.app(), port=8888)
+    server_thread = server.Server(registry.app(), port=8888)
     server_thread.start()
 
     print("Running on ",server_thread.url)
@@ -44,7 +44,7 @@ def run():
     db.connect()
     db.create_tables([Person], safe=True)
 
-    server_thread = server.Server(namespace.app(), port=8888)
+    server_thread = server.Server(registry.app(), port=8888)
     server_thread.start()
 
     print("Running on ",server_thread.url)

@@ -4,7 +4,7 @@ import sys
 from datetime import datetime, timezone
 
 def make_server():
-    n = server.Namespace(name="test")
+    n = server.Registry(name="test")
     @n.add()
     def echo(x):
         return x
@@ -165,7 +165,7 @@ def test():
         job = client.Create(s.Job,value=dict(name="butt"))
             # client.Call(s.Job.create(...))
 
-        print(job, job.url, job.methods, job.attributes)
+        print(job, job.url, job.actions.keys(), job.attributes)
 
         for j in client.List(s.Job):
             print(j)
