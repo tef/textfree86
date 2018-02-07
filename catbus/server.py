@@ -201,6 +201,7 @@ class NestedHandler(RequestHandler):
 
     def handle_embed(self, prefix, obj):
         pass
+
     
 class Waiter(Embed):
     suffix = '/wait'
@@ -292,6 +293,78 @@ class MethodHandler(RequestHandler):
             return objects.Link(self.url(prefix))
         else:
             return objects.Form(self.url(prefix), arguments=funcargs(self.method))
+        
+class Namespace:
+    rpc = True
+    
+    def __init__(self):
+        pass
+
+    class Handler(NestedHandler):
+        def __init__(self, name, cls):
+            NestedHandler.__init__(self, name, cls)
+            self.obj = self.cls()
+
+        def add_nested_handlers(self):
+            for name, method in self.cls.__dict__.items():
+                if isinstance(method, type) and hasattr(method, 'Handler'):
+                    handler = method.Handler(name, method)
+                    self.add_nested_handler(name, method, handler)
+                elif isinstance(method, types.FunctionType):
+                    handler = FunctionHandler(self.name, method)
+                    self.add_nested_handler(name, method, handler)
+
+        def subpath(self, path):
+            return path.split('/',1)[0]
+
+        def handle_request(self, context, request):
+            if request.method == 'GET':
+                return self.obj
+            else:
+                raise objects.MethodNotAllowed()
+        
+        def nested_request(self, path, context, request):
+            context[self.name] = self.obj
+            return NestedHandler.nested_request(self, path, context, request)
+
+        def url(self, prefix):
+            return prefix + self.name
+
+        def link(self, prefix):
+            return objects.Link(self.url(prefix))
+
+        def inline(self, prefix):
+            return self.handle_embed(prefix, self.obj)
+
+        def handle_embed(self,prefix, o):
+            sub_prefix = "{}/".format(self.url(prefix))
+            if o is None or o is self.cls:
+                return self.link(prefix)
+            elif not o is self.obj:
+                raise Exception('bad handler')
+
+            links, actions = extract_actions(self.cls)
+            attributes = extract_attributes(self.obj)
+            embeds = {}
+            for name, handler in self.for_path.items():
+                if name in links: continue
+                if name in actions: continue
+                inline = handler.inline(sub_prefix)
+                if inline: embeds[name] = inline
+                links.append(name)
+
+            metadata = dict(
+                url = self.url(prefix),
+                links = links,
+                actions = actions,
+                embeds = embeds,
+            )
+
+            return objects.Namespace(
+                kind = self.cls.__name__,
+                metadata = metadata,
+                attributes = attributes,
+            )
 
 class Service:
     rpc = True
@@ -409,7 +482,8 @@ class Singleton:
             for name, handler in self.for_path.items():
                 if name in links: continue
                 if name in actions: continue
-                embeds[name] = handler.link(sub_prefix)
+                inline = handler.inline(sub_prefix)
+                if inline: embeds[name] = inline
                 links.append(name)
 
             metadata = dict(
