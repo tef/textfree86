@@ -156,8 +156,6 @@ class Client:
 
         if isinstance(request, CachedResult):
             return request.result
-        else:
-            print(request)
 
         return self.fetch(request)
 
@@ -227,12 +225,12 @@ class Client:
             if isinstance(obj, objects.Link):
                 return RemoteFunction('GET', url, [])
             if isinstance(obj, objects.Form):
-                return RemoteFunction('POST', url, obj.arguments)
+                return RemoteFunction('POST', url, obj.arguments, defaults=obj.defaults)
             if isinstance(obj, objects.Dataset):
                 return RemoteDataset(obj.kind, url, obj)
             if isinstance(obj, objects.Resource):
                 return RemoteObject(obj.kind, url, obj)
-            if isinstance(obj, objects.Service):
+            if isinstance(obj, objects.Namespace):
                 return RemoteObject(obj.kind, url, obj)
             if isinstance(obj, objects.Waiter):
                 return RemoteWaiter(obj, url) 

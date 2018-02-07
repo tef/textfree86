@@ -113,7 +113,7 @@ class Dataset(Hyperlink):
         return self.metadata['url']
 
 @registry.add()
-class Service(Hyperlink):
+class Namespace(Hyperlink):
     def __init__(self, kind, metadata, attributes):
         self.kind = kind
         self.metadata = metadata

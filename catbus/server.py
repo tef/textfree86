@@ -176,9 +176,13 @@ class NestedHandler(RequestHandler):
         return self.for_path[subpath].on_request(context, request)
 
     def add_nested_handler(self, name, cls, handler):
+        if name in self.for_path or cls in self.for_type:
+            raise Exception('dupe')
         self.for_path[name] = handler
         self.for_type[cls] = handler
         for t in handler.subtypes():
+            if t in self.for_type:
+                raise Exception('dupe')
             self.for_type[t] = handler
 
     def subtypes(self):
@@ -347,7 +351,7 @@ class Service:
                 embeds = embeds,
             )
 
-            return objects.Service(
+            return objects.Namespace(
                 kind = self.cls.__name__,
                 metadata = metadata,
                 attributes = attributes,
@@ -415,7 +419,7 @@ class Singleton:
                 embeds = embeds,
             )
 
-            return objects.Service(
+            return objects.Namespace(
                 kind = self.cls.__name__,
                 metadata = metadata,
                 attributes = attributes,
@@ -810,10 +814,14 @@ class Registry:
         n = obj.__name__ if name is None else name
         handler = handler(n, obj)
 
+        if name in self.for_path or obj in self.for_type:
+            raise Exception('dupe')
         self.for_path[n] = handler
         self.for_type[obj] = handler
 
         for cls in handler.subtypes():
+            if cls in self.for_type:
+                raise Exception('dupe')
             self.for_type[cls] = handler
         self.service = None
 
@@ -830,7 +838,7 @@ class Registry:
                 else:
                     actions[name] = o.link(prefix=self.prefix)
 
-            self.service = objects.Service('Index',
+            self.service = objects.Namespace('Index',
                 metadata={'url':self.prefix,'links':links, 'embeds':embeds, 'actions':actions},
                 attributes={},
             )
