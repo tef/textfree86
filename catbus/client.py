@@ -159,7 +159,7 @@ class Client:
 
         return self.fetch(request)
 
-    def Wait(self, request, poll_seconds=5):
+    def Wait(self, request, poll_seconds=2):
         if isinstance(request, RemoteWaiter):
             request = request()
         else:
@@ -170,7 +170,9 @@ class Client:
 
         obj = self.fetch(request)
         while isinstance(obj, RemoteWaiter):
-            time.sleep(poll_seconds) # fixme
+            wait = obj.metadata.get(wait_seconds, poll_seconds)
+            wait  = max(poll_seconds, wait)
+            time.sleep(wait) # fixme
             request = obj()
             obj = self.fetch(request)
         return obj

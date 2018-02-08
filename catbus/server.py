@@ -217,6 +217,7 @@ class Waiter(Embed):
         url = "{}{}?{}".format(prefix, name,urlencode(params))
         metadata = dict()
         metadata["url"] = url
+        metadata["wait_seconds"] = 2
         return objects.Waiter(
             metadata = metadata,
         )
