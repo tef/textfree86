@@ -170,7 +170,7 @@ class Client:
 
         obj = self.fetch(request)
         while isinstance(obj, RemoteWaiter):
-            wait = obj.metadata.get(wait_seconds, poll_seconds)
+            wait = obj.metadata.get('wait_seconds', poll_seconds)
             wait  = max(poll_seconds, wait)
             time.sleep(wait) # fixme
             request = obj()
@@ -203,6 +203,8 @@ class Client:
             data = objects.dump(request.data)
         else:
             data = None
+
+        print('DEBUG', 'Fetching', url)
 
         result = self.session.request(
                 method, 
@@ -239,6 +241,8 @@ class Client:
 
             return obj
 
+        #print(result.text)
+        #print()
         obj = objects.parse(result.text, transform)
 
         return obj
@@ -247,6 +251,10 @@ class RemoteWaiter(Navigable):
     def __init__(self, obj, url):
         self.url = url
         self.obj = obj
+
+    @property
+    def metadata(self):
+        return self.obj.metadata
 
     def __str__(self):
         return "<Waiting for {}>".format(self.url)
@@ -526,7 +534,7 @@ def cli(client, endpoint, args):
     for action in actions[:-1]:
         if isinstance(obj, Navigable):
             request = obj.perform(action)
-            print(request.url)
+            print('DEBUG', action.path, request.url)
         else:
             raise Exception('can\'t navigate to {}'.format(action.path))
         obj = client.Call(request)
@@ -536,7 +544,7 @@ def cli(client, endpoint, args):
         attr = getattr(obj, action.path)
         if isinstance(attr, Navigable):
             request = obj.perform(action)
-            print(request.url)
+            print('DEBUG', action.path, request.url)
             obj = client.Call(request)
         elif not action.verb:
             obj = attr
