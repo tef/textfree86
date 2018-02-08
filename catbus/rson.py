@@ -12,9 +12,13 @@ see spec/rson/md
 import re
 import io
 import base64
-import json
+import sys
 
-from collections import namedtuple, OrderedDict
+if sys.version_info.minor > 6 or sys.version_info.minor == 6 and sys.implementation.name == 'cpython':
+    OrderedDict = dict
+else:
+    from collections import namedtuple, OrderedDict
+
 from datetime import datetime, timedelta, timezone
 
 
@@ -560,7 +564,7 @@ class Codec:
                     buf.write(", ")
                 self.dump_rson(x, buf, transform)
             buf.write(']')
-        elif isinstance(obj, OrderedDict):
+        elif isinstance(obj, OrderedDict): # must be before dict
             buf.write('{')
             first = True
             for k, v in obj.items():
