@@ -18,7 +18,7 @@ from werkzeug.utils import redirect as Redirect
 from werkzeug.wrappers import Request, Response
 from werkzeug.exceptions import HTTPException
 
-from . import objects
+from . import dom
 
 def funcargs(m):
     args =  m.__code__.co_varnames[:m.__code__.co_argcount]
@@ -38,7 +38,7 @@ def make_resource(obj, url):
         actions = actions,
     )
 
-    return objects.Resource(
+    return dom.Resource(
         kind = cls.__name__,
         metadata = metadata,
         attributes = attributes,
@@ -112,11 +112,11 @@ class RequestHandler:
                 return obj()
         else:
             if not obj.safe:
-                raise objects.MethodNotAllowed()
+                raise dom.MethodNotAllowed()
             return obj()
 
     def invoke_waiter(self, waiter, obj, params):
-        params = {key: objects.parse(value) for key,value in params.items()}
+        params = {key: dom.parse(value) for key,value in params.items()}
         # if waiter is a fn
         if obj is None:
             out = waiter(**params)
@@ -149,14 +149,14 @@ class NestedHandler(RequestHandler):
         path = request.url
 
         if not path.startswith(self.name):
-            raise objects.NotFound()
+            raise dom.NotFound()
 
         path = path[len(self.name)+1:]
 
         subpath = self.subpath(path)
 
         if subpath in self.for_path:
-            r = objects.Request(
+            r = dom.Request(
                     request.method,
                     path, request.params,
                     request.headers,
@@ -165,7 +165,7 @@ class NestedHandler(RequestHandler):
             return self.nested_request(subpath, context, r)
 
         elif subpath:
-            raise objects.NotFound()
+            raise dom.NotFound()
         else:
             return self.handle_request(context, request)
 
@@ -211,14 +211,14 @@ class Waiter(Embed):
         self.from_resolve = False
 
     def embed(self, prefix, name):
-        params = {key: objects.dump(value) for key, value in self.args.items()}
+        params = {key: dom.dump(value) for key, value in self.args.items()}
         if not self.from_resolve:
             name = "{}{}".format(name,self.suffix) 
         url = "{}{}?{}".format(prefix, name,urlencode(params))
         metadata = dict()
         metadata["url"] = url
         metadata["wait_seconds"] = 2
-        return objects.Waiter(
+        return dom.Waiter(
             metadata = metadata,
         )
 
@@ -236,22 +236,22 @@ class FunctionHandler(RequestHandler):
             else:
                 return MethodNotAllowed()
         elif path:
-            raise objects.NotFound()
+            raise dom.NotFound()
 
         if method == 'GET':
             return self.invoke(self.fn, safe=True)
         elif method == 'POST':
             return self.invoke(self.fn, args=data)
-        raise objects.MethodNotAllowed()
+        raise dom.MethodNotAllowed()
 
     def url(self, prefix):
         return prefix+self.name
 
     def link(self, prefix):
         if getattr(self.fn, 'safe', False):
-            return objects.Link(self.url(prefix))
+            return dom.Link(self.url(prefix))
         else:
-            return objects.Form(self.url(prefix), arguments=funcargs(self.fn))
+            return dom.Form(self.url(prefix), arguments=funcargs(self.fn))
 
     def embed(self, prefix, o):
         if o is None or o is self.fn:
@@ -278,22 +278,22 @@ class MethodHandler(RequestHandler):
             else:
                 return MethodNotAllowed()
         elif path:
-            raise objects.NotFound()
+            raise dom.NotFound()
 
         if method == 'GET':
             return self.invoke(fn, safe=True)
         elif method == 'POST':
             return self.invoke(fn, args=data)
-        raise objects.MethodNotAllowed()
+        raise dom.MethodNotAllowed()
 
     def url(self, prefix):
         return prefix+self.name
 
     def link(self, prefix):
         if getattr(self.method, 'safe', False):
-            return objects.Link(self.url(prefix))
+            return dom.Link(self.url(prefix))
         else:
-            return objects.Form(self.url(prefix), arguments=funcargs(self.method))
+            return dom.Form(self.url(prefix), arguments=funcargs(self.method))
         
 class Namespace:
     rpc = True
@@ -322,7 +322,7 @@ class Namespace:
             if request.method == 'GET':
                 return self.obj
             else:
-                raise objects.MethodNotAllowed()
+                raise dom.MethodNotAllowed()
         
         def nested_request(self, path, context, request):
             context[self.name] = self.obj
@@ -332,7 +332,7 @@ class Namespace:
             return prefix + self.name
 
         def link(self, prefix):
-            return objects.Link(self.url(prefix))
+            return dom.Link(self.url(prefix))
 
         def inline(self, prefix):
             return self.handle_embed(prefix, self.obj)
@@ -361,7 +361,7 @@ class Namespace:
                 embeds = embeds,
             )
 
-            return objects.Namespace(
+            return dom.Namespace(
                 kind = self.cls.__name__,
                 metadata = metadata,
                 attributes = attributes,
@@ -392,13 +392,13 @@ class Service:
             if request.method == 'GET':
                 return self.cls()
             else:
-                raise objects.MethodNotAllowed()
+                raise dom.MethodNotAllowed()
 
         def url(self, prefix):
             return prefix+self.name
 
         def link(self, prefix):
-            return objects.Link(self.url(prefix))
+            return dom.Link(self.url(prefix))
 
         def inline(self, prefix):
             return self.handle_embed(prefix, self.cls())
@@ -425,7 +425,7 @@ class Service:
                 embeds = embeds,
             )
 
-            return objects.Namespace(
+            return dom.Namespace(
                 kind = self.cls.__name__,
                 metadata = metadata,
                 attributes = attributes,
@@ -455,7 +455,7 @@ class Singleton:
             if request.method == 'GET':
                 return self.obj
             else:
-                raise objects.MethodNotAllowed()
+                raise dom.MethodNotAllowed()
         
         def nested_request(self, path, context, request):
             context[self.name] = self.obj
@@ -465,7 +465,7 @@ class Singleton:
             return prefix + self.name
 
         def link(self, prefix):
-            return objects.Link(self.url(prefix))
+            return dom.Link(self.url(prefix))
 
         def inline(self, prefix):
             return self.handle_embed(prefix, self.obj)
@@ -494,7 +494,7 @@ class Singleton:
                 embeds = embeds,
             )
 
-            return objects.Namespace(
+            return dom.Namespace(
                 kind = self.cls.__name__,
                 metadata = metadata,
                 attributes = attributes,
@@ -511,9 +511,9 @@ class Token:
             method, path, params, data = request.method, request.url, request.params, request.data
             path = path[len(self.name)+1:]
             if path.startswith('_'): 
-                raise objects.Forbidden()
+                raise dom.Forbidden()
             if '/' in path:
-                raise objects.NotFound()
+                raise dom.NotFound()
 
             if params:
                 obj =  self.lookup(params)
@@ -521,7 +521,7 @@ class Token:
                 if not path:
                     if method == 'GET':
                         return obj
-                    raise objects.MethodNotAllowed()
+                    raise dom.MethodNotAllowed()
 
                 fn = getattr(obj, path)
 
@@ -530,19 +530,19 @@ class Token:
                 elif method == 'POST':
                     return self.invoke(fn, args=data)
                 else:
-                    raise objects.MethodNotAllowed()
+                    raise dom.MethodNotAllowed()
             else:
                 if path:
-                    raise objects.NotImplemented()
+                    raise dom.NotImplemented()
 
                 if method == 'GET':
                     return self.view
                 elif method == 'POST':
                     return self.view(**data)
-                raise objects.MethodNotAllowed()
+                raise dom.MethodNotAllowed()
 
         def lookup(self, params):
-            params = {key: objects.parse(value) for key,value in params.items() if not key.startswith('_')}
+            params = {key: dom.parse(value) for key,value in params.items() if not key.startswith('_')}
             obj = self.view(**params)
             return obj
 
@@ -551,12 +551,12 @@ class Token:
 
         def link(self, prefix):
             args = funcargs(self.view.__init__)
-            return objects.Form(self.url(prefix), arguments=args)
+            return dom.Form(self.url(prefix), arguments=args)
 
         def embed(self, prefix, o):
             if o is None or o is self.view:
                 return self.link(prefix)
-            params = {key: objects.dump(value) for key, value in o.__dict__.items()}
+            params = {key: dom.dump(value) for key, value in o.__dict__.items()}
             url = "{}?{}".format(self.url(prefix), urlencode(params))
 
             return make_resource(o, url)
@@ -576,7 +576,7 @@ class Collection:
             metadata["selector"] = self.selector
             metadata["continue"] = self.next
 
-            return objects.List(
+            return dom.Cursor(
                 kind = self.name,
                 items = self.items,
                 metadata = metadata,
@@ -632,7 +632,7 @@ class Collection:
                     id, obj_method = path, None
 
                 if obj_method and obj_method.startswith('_'):
-                    raise objects.Forbidden()
+                    raise dom.Forbidden()
                 
                 if not obj_method:
                     if method == 'GET':
@@ -641,7 +641,7 @@ class Collection:
                         self.delete(id)
                         return None
                     else:
-                        raise objects.MethodNotAllowed()
+                        raise dom.MethodNotAllowed()
                 elif '/' in obj_method:
                     obj_method, subpath = obj_method.split('/',1)
 
@@ -653,7 +653,7 @@ class Collection:
                             raise MethodNotAllowed()
                         return self.invoke_waiter(fn.waiter, obj,  params)
                     else:
-                        raise objects.NotFound()
+                        raise dom.NotFound()
                 else:
                     obj = self.lookup(id)
                     fn = getattr(obj, obj_method)
@@ -663,7 +663,7 @@ class Collection:
                     elif method == 'POST':
                         return self.invoke(fn, data)
                     else:
-                        raise objects.MethodNotAllowed()
+                        raise dom.MethodNotAllowed()
 
             elif col_method =='list':
                 if method == 'GET':
@@ -672,29 +672,29 @@ class Collection:
                     next = params.get('continue')
                     if limit:
                         limit = int(limit)
-                    selector = objects.parse_selector(selector)
+                    selector = dom.parse_selector(selector)
                     return self.list(selector, limit, next)
                 elif method == 'DELETE':
                     selector = params['where']
-                    selector = objects.parse_selector(selector)
+                    selector = dom.parse_selector(selector)
                     self.delete_list(selector)
                     return
                 else:
-                    raise objects.MethodNotAllowed()
+                    raise dom.MethodNotAllowed()
             elif col_method == 'new':
                 if method != 'POST':
-                    raise objects.MethodNotAllowed()
+                    raise dom.MethodNotAllowed()
                 return self.create(data)
             elif col_method == 'delete':
                 if method != 'POST':
-                    raise objects.MethodNotAllowed()
+                    raise dom.MethodNotAllowed()
                 return self.delete(path)
             elif col_method == '':
                 if method != 'GET':
-                    raise objects.MethodNotAllowed()
+                    raise dom.MethodNotAllowed()
                 return self.cls
 
-            raise objects.NotImplelmented(method)
+            raise dom.NotImplelmented(method)
 
         def url(self, prefix):
             return prefix+self.name
@@ -706,7 +706,7 @@ class Collection:
                 list=self.selector_args(),
                 key=self.key
             )
-            return objects.Dataset(
+            return dom.Dataset(
                 kind=self.cls.__name__,
                 metadata = metadata
             )
@@ -735,7 +735,7 @@ class Collection:
                 actions = actions,
             )
 
-            return objects.Resource(
+            return dom.Resource(
                 kind = self.cls.__name__,
                 metadata = metadata,
                 attributes = attributes,
@@ -823,9 +823,9 @@ class Model:
             for s in selector:
                 key, operator, values = s.key, s.__class__, s.value
                 field = self.fields[key]
-                if operator == objects.Operator.Equals:
+                if operator == dom.Operator.Equals:
                     items = items.where(field == values)
-                elif operator == objects.Operator.NotEquals:
+                elif operator == dom.Operator.NotEquals:
                     items = items.where(field != values)
                 else:
                     raise Exception('unsupported')
@@ -853,7 +853,7 @@ class Model:
 
             return Collection.List(
                 name=self.name, 
-                selector=objects.dump_selector(selector),
+                selector=dom.dump_selector(selector),
                 items=items,
                 next=next_token
             )
@@ -913,7 +913,7 @@ class Registry:
                 else:
                     actions[name] = o.link(prefix=self.prefix)
 
-            self.service = objects.Namespace('Index',
+            self.service = dom.Namespace('Index',
                 metadata={'url':self.prefix,'links':links, 'embeds':embeds, 'actions':actions},
                 attributes={},
             )
@@ -930,14 +930,14 @@ class Registry:
             if name in self.for_path:
                 data  = request.data.decode('utf-8')
                 if data:
-                    args = objects.parse(data)
+                    args = dom.parse(data)
                 else:
                     args = None
 
                 params = request.args
 
                 context = {}
-                request = objects.Request(
+                request = dom.Request(
                     method=request.method,
                     url=path,
                     params=params, 
@@ -947,7 +947,7 @@ class Registry:
 
                 out = self.for_path[name].on_request(context, request)
             else:
-                raise objects.NotFound(path)
+                raise dom.NotFound(path)
         
         def transform(o):
             if isinstance(o, type) or isinstance(o, types.FunctionType):
@@ -963,8 +963,8 @@ class Registry:
         if out is None:
             return Response('', status='204 None')
 
-        result = objects.dump(out, transform)
-        return Response(result, content_type=objects.CONTENT_TYPE) 
+        result = dom.dump(out, transform)
+        return Response(result, content_type=dom.CONTENT_TYPE) 
     def app(self):
         return WSGIApp(self.handle)
 

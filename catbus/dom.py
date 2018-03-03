@@ -1,4 +1,4 @@
-"""rson.objects
+"""rson.dom
 
 registry of objects sent/recieved on the wire. 
 """
@@ -125,7 +125,7 @@ class Namespace(Hyperlink):
 
 
 @registry.add()
-class List(Hyperlink):
+class Cursor(Hyperlink):
     def __init__(self, kind, metadata, items):
         self.kind = kind
         self.items = items

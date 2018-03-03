@@ -6,8 +6,6 @@ RemoteObject/RemoteFunction wrapper objects.
 
 """
 
-# warning: defines a function called list
-_list = list
 
 import os
 import sys
@@ -17,12 +15,12 @@ from urllib.parse import urljoin
 
 import requests
 
-from . import objects
+from . import dom
 
-HEADERS={'Content-Type': objects.CONTENT_TYPE}
+HEADERS={'Content-Type': dom.CONTENT_TYPE}
 
 def unwrap_request(method, request, data=None):
-    if isinstance(request, objects.Request):
+    if isinstance(request, dom.Request):
         if data is not None:
             raise Exception('too much data')
         return request
@@ -30,7 +28,7 @@ def unwrap_request(method, request, data=None):
     if hasattr(request, 'url'):
         request = request.url
 
-    return objects.Request(method, request, {}, {}, data)
+    return dom.Request(method, request, {}, {}, data)
 
 class Navigable:
     def display(self):
@@ -115,14 +113,14 @@ class Client:
     def List(self, request, where=None, batch=None):
         if isinstance(request, RemoteDataset):
             request = request.list(where=where, batch=batch)
-        elif instance(obj, objects.Request):
+        elif instance(obj, dom.Request):
             pass
         else:
             raise Exception('no')
 
         # while ... keep returning them
         obj = self.fetch(request)
-        if isinstance(obj, RemoteList):
+        if isinstance(obj, RemoteCursor):
             while obj:
                 for x in obj.values():
                     yield x
@@ -200,7 +198,7 @@ class Client:
         params = request.params
         
         if request.data is not None:
-            data = objects.dump(request.data)
+            data = dom.dump(request.data)
         else:
             data = None
 
@@ -218,32 +216,32 @@ class Client:
             return None
 
         def transform(obj):
-            if not isinstance(obj, objects.Hyperlink):
+            if not isinstance(obj, dom.Hyperlink):
                 return obj
 
-            if isinstance(obj, objects.List):
-                return RemoteList(obj.kind, result.url, obj)
+            if isinstance(obj, dom.Cursor):
+                return RemoteCursor(obj.kind, result.url, obj)
 
             url = urljoin(result.url, obj.url)
 
-            if isinstance(obj, objects.Link):
+            if isinstance(obj, dom.Link):
                 return RemoteFunction('GET', url, [])
-            if isinstance(obj, objects.Form):
+            if isinstance(obj, dom.Form):
                 return RemoteFunction('POST', url, obj.arguments, defaults=obj.defaults)
-            if isinstance(obj, objects.Dataset):
+            if isinstance(obj, dom.Dataset):
                 return RemoteDataset(obj.kind, url, obj)
-            if isinstance(obj, objects.Resource):
+            if isinstance(obj, dom.Resource):
                 return RemoteObject(obj.kind, url, obj)
-            if isinstance(obj, objects.Namespace):
+            if isinstance(obj, dom.Namespace):
                 return RemoteObject(obj.kind, url, obj)
-            if isinstance(obj, objects.Waiter):
+            if isinstance(obj, dom.Waiter):
                 return RemoteWaiter(obj, url) 
 
             return obj
 
         #print(result.text)
         #print()
-        obj = objects.parse(result.text, transform)
+        obj = dom.parse(result.text, transform)
 
         return obj
 
@@ -260,7 +258,7 @@ class RemoteWaiter(Navigable):
         return "<Waiting for {}>".format(self.url)
 
     def __call__(self, *args, **kwargs):
-        return objects.Request('GET', self.url, {}, {}, None)
+        return dom.Request('GET', self.url, {}, {}, None)
 
 class RemoteFunction(Navigable):
     def __init__(self, method, url, arguments, defaults=(), cached=None):
@@ -277,7 +275,7 @@ class RemoteFunction(Navigable):
         if self.method == 'GET':
             if self.cached:
                 return CachedResult(self.cached)
-            return objects.Request('GET', self.url, {}, {}, None)
+            return dom.Request('GET', self.url, {}, {}, None)
 
         data = dict()
         for key, value in zip(self.arguments, args):
@@ -291,7 +289,7 @@ class RemoteFunction(Navigable):
                     data[key] = self.defaults
                 else:
                     raise Exception('missing arg: {}'.format(key))
-        return objects.Request('POST', self.url, {}, {}, data)
+        return dom.Request('POST', self.url, {}, {}, data)
 
 class RemoteDataset(Navigable):
     def __init__(self, kind, url, obj, selectors=()):
@@ -311,7 +309,7 @@ class RemoteDataset(Navigable):
 
     def lookup(self, name):
         url = "{}/id/{}".format(self.url, name)
-        return objects.Request('GET', url, {}, {}, None)
+        return dom.Request('GET', url, {}, {}, None)
     
     def create(self, *args, **kwargs):
         url = "{}/new".format(self.url)
@@ -322,11 +320,11 @@ class RemoteDataset(Navigable):
             if key in kwargs:
                 raise Exception('invalid')
         data.update(kwargs)
-        return objects.Request('POST', url, {}, {}, data)
+        return dom.Request('POST', url, {}, {}, data)
 
     def delete(self, name):
         url = "{}/id/{}".format(self.url, name)
-        return objects.Request('DELETE', url, {}, {}, None)
+        return dom.Request('DELETE', url, {}, {}, None)
 
     def get_params(self, selector, batch):
         params = dict()
@@ -335,7 +333,7 @@ class RemoteDataset(Navigable):
         if selector:
             params['where'] = selector
         if self.selectors: 
-            params['where'] = objects.dump_selector(self.selectors)
+            params['where'] = dom.dump_selector(self.selectors)
         if batch:
             params['limit'] = batch
         return params
@@ -345,12 +343,12 @@ class RemoteDataset(Navigable):
         params = self.get_params(where, None)
         if 'where' not in params:
             raise Exception('missing where')
-        return objects.Request('DELETE', url, params, {}, None)
+        return dom.Request('DELETE', url, params, {}, None)
 
     def list(self, where=None, batch=None):
         url = "{}/list".format(self.url)
         params = self.get_params(where, batch)
-        return objects.Request('GET', url, params, {}, None)
+        return dom.Request('GET', url, params, {}, None)
 
     def next(self, batch=None):
         # so that remote collection / selectors have
@@ -365,7 +363,7 @@ class RemoteDataset(Navigable):
         for name, value in kwargs.items():
             if name not in names:
                 raise Exception('no')
-            new_selectors.append(objects.Operator.Equals(
+            new_selectors.append(dom.Operator.Equals(
                 key=name,
                 value=value,
             ))
@@ -380,7 +378,7 @@ class RemoteDataset(Navigable):
         for name, value in kwargs.items():
             if name not in names:
                 raise Exception('no')
-            new_selectors.append(objects.Operator.NotEquals(
+            new_selectors.append(dom.Operator.NotEquals(
                 key=name,
                 value=value
         ))
@@ -388,7 +386,7 @@ class RemoteDataset(Navigable):
         return RemoteDataset(self.kind, self.url, self.obj, new_selectors)
 
 
-class RemoteList(Navigable):
+class RemoteCursor(Navigable):
     def __init__(self,kind, base_url, obj):
         self.base_url = base_url
         self.kind = kind
@@ -404,7 +402,7 @@ class RemoteList(Navigable):
             if batch:
                 params['limit'] = batch
 
-            return objects.Request('GET', url, params, {}, None)
+            return dom.Request('GET', url, params, {}, None)
 
     def values(self):
         return self.obj.items
