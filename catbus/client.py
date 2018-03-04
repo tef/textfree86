@@ -202,7 +202,7 @@ class Client:
         else:
             data = None
 
-        print('DEBUG', 'Fetching', url)
+        # print('DEBUG', 'Fetching', url)
 
         result = self.session.request(
                 method, 

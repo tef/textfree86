@@ -1,4 +1,4 @@
-# catbus, a client-server framework
+# catbus, a client-server framework with a reusable cli
 
 (Python 3.6+)
 
@@ -6,14 +6,27 @@
 
 catbus is a client-server framework for RPC, CRUD, and Socket-like APIs, with a reusable client.
 
-There is no codegen or schema used in the following examples:
+There is no codegen or schema used, instead the CLI works more like a web-browser.
 
-## serving a function
+
+# functions
+
+Exposed functions can be invoked from the command line:
+
+```
+$ alias catbus="CATBUS_URL=http://127.1:8888/ pipenv run python3 -m catbus"
+
+$ catbus now
+2018-03-04 01:41:00.280980+00:00
+```
+
+The server exposes only one function, `now()`
+
 ```
 from catbus import server
 from datetime import datetime, timezone
 
-ns = server.Namespace() # Where our objects and methods live
+ns = server.Registry() # Where our objects and methods live
 
 @ns.add()
 def now():
@@ -31,7 +44,7 @@ finally:
     thread.stop()
 ```
 
-## calling a function
+and can be accesed from python, too:
 
 ```
 from catbus import client
@@ -44,6 +57,8 @@ print('Time on remote service is {}'.format(now))
 ```
 
 ## serving a singleton 
+
+on the server:
 ```
 @ns.add()
 class Store(server.Singleton):
@@ -57,7 +72,19 @@ class Store(server.Singleton):
         return self.sum
 ```
 
-## calling a singleton
+calling from command line
+
+```
+$ catbus Store:add --n=7
+7
+$ catbus Store:add --n=23
+30
+$ catbus Store:total
+30
+
+```
+
+calling from python
 
 ```
 
@@ -111,13 +138,6 @@ client.delete(job)
 ## long polling
 
 ```
-waiter = client.Call(s.expensive(123))
-
-value = client.Wait(waiter, poll_seconds=0.5)
-```
-
-
-```
 @n.add()
 @server.waiter()
 def expensive(value):
@@ -130,6 +150,23 @@ def expensive(value, count):
     else:
         return value
 ```
+
+calling from cli
+
+```
+$ catbus MyEndpoint:Two:expensive --value="Test"
+# ... client polls three times ...
+Test
+```
+
+calling from python
+
+```
+waiter = client.Call(s.expensive(123))
+
+value = client.Wait(waiter, poll_seconds=0.5)
+```
+
 
 ## exposing a table
 

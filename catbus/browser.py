@@ -80,7 +80,7 @@ def cli(c, endpoint, args):
     for action in actions[:-1]:
         if isinstance(obj, client.Navigable):
             request = obj.perform(action)
-            print('DEBUG', action.path, request.url)
+            # print('DEBUG', action.path, request.url)
         else:
             raise Exception('can\'t navigate to {}'.format(action.path))
         obj = c.Call(request)
@@ -90,7 +90,7 @@ def cli(c, endpoint, args):
         attr = getattr(obj, action.path)
         if isinstance(attr, client.Navigable):
             request = obj.perform(action)
-            print('DEBUG', action.path, request.url)
+            # print('DEBUG', action.path, request.url)
             obj = c.Call(request)
         elif not action.verb:
             obj = attr
