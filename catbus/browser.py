@@ -78,7 +78,7 @@ def cli(c, endpoint, args):
     obj = c.Get(endpoint)
 
     for action in actions[:-1]:
-        if isinstance(obj, Navigable):
+        if isinstance(obj, client.Navigable):
             request = obj.perform(action)
             print('DEBUG', action.path, request.url)
         else:
@@ -88,16 +88,16 @@ def cli(c, endpoint, args):
     if actions:
         action = actions[-1]
         attr = getattr(obj, action.path)
-        if isinstance(attr, Navigable):
+        if isinstance(attr, client.Navigable):
             request = obj.perform(action)
             print('DEBUG', action.path, request.url)
             obj = c.Call(request)
         elif not action.verb:
             obj = attr
-    if isinstance(obj, RemoteWaiter):
+    if isinstance(obj, client.RemoteWaiter):
         obj  = c.Wait(obj)
 
-    if isinstance(obj, Navigable):
+    if isinstance(obj, client.Navigable):
         obj = obj.display()
     print(obj)
     return -1
