@@ -112,6 +112,14 @@ class Dataset(Hyperlink):
     def url(self):
         return self.metadata['url']
 
+
+@registry.add()
+class Cursor(Hyperlink):
+    def __init__(self, kind, metadata, items):
+        self.kind = kind
+        self.items = items
+        self.metadata = metadata
+
 @registry.add()
 class Namespace(Hyperlink):
     def __init__(self, kind, metadata, attributes):
@@ -123,14 +131,6 @@ class Namespace(Hyperlink):
     def url(self):
         return self.metadata['url']
 
-
-@registry.add()
-class Cursor(Hyperlink):
-    def __init__(self, kind, metadata, items):
-        self.kind = kind
-        self.items = items
-        self.metadata = metadata
-
 @registry.add()
 class Resource(Hyperlink):
     def __init__(self, kind, metadata, attributes):
@@ -141,6 +141,24 @@ class Resource(Hyperlink):
     @property
     def url(self):
         return self.metadata['url']
+
+@registry.add()
+class Document:
+    def __init__(self, metadata, attributes, body):
+        self.attributes = attributes
+        self.metadata = metadata
+        self.body = body
+
+    @property
+    def url(self):
+        return self.metadata['url']
+
+@registry.add()
+class Para:
+    def __init__(self, attributes, body):
+        self.attributes = attributes
+        self.body = body
+
 
 @registry.add()
 class Struct:
@@ -165,6 +183,7 @@ class Response:
         self.status = status
         self.headers = headers
         self.data = data
+
 class Operator:
     ops = Registry()
     class Operator:
