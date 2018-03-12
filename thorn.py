@@ -16,11 +16,6 @@ def try_num(arg):
     return arg
 
 def extract_args(template, argv):
-    args = {}
-    for name in template:
-        arg = argv.pop(0)
-        arg = try_num(arg)
-        args[name] = arg
     return args
 
 
@@ -51,11 +46,30 @@ class wire:
                 return wire.Action("help", action.path, action.argv)
             if argv and argv[0] in self.subcommands:
                 return self.subcommands[argv[0]].invoke(path+[argv[0]], argv[1:], environ)
-            if len(self.arguments) == len(argv):
-                argv = extract_args(self.arguments, argv)
-                return wire.Action("call", path, argv)
+
+            args = {}
+            for name in self.arguments['positional']:
+                if not argv: 
+                    return wire.Action("error", path, args, errors=("missing argument: {}".format(name),))
+
+                args[name] = try_num(argv.pop(0))
+
+            for name in self.arguments['optional']:
+                if not argv: break
+
+                args[name] = try_num(argv.pop(0))
+
+            if self.arguments['tail']:
+                tail = []
+                while argv:
+                    tail.append(try_num(argv.pop(0)))
+
+                args[self.arguments['tail']] = tail
+
+            if not argv:
+                return wire.Action("call", path, args)
             else:
-                return wire.Action("error", path, argv, errors=("bad_arguments",))
+                return wire.Action("error", path, args, errors=("unknown trailing argument: {!r}".format(" ".join(argv)),))
 
         def help(self, path, argv):
             if path and path[0] in self.subcommands:
@@ -82,6 +96,8 @@ class cli:
             self.run_fn = None
             self.short = short
             self.positional = None
+            self.optional = None
+            self.tail = None
 
         def subcommand(self, name, short):
             cmd = cli.Command(name, short)
@@ -93,14 +109,15 @@ class cli:
                 return self.help(path[1:], argv)
             elif path and path[0] in self.subcommands:
                 return self.subcommands[path[0]].call(path[1:], argv)
-            elif self.run_fn and len(argv) == len(self.positional):
+            elif self.run_fn and len(argv) == len(self.positional) + bool(self.tail):
                 return self.run_fn({}, **argv)
             else:
-                return wire.Result(-1, self.help(path, argv))
+                return wire.Result(-1, self.render().usage())
 
-        def run(self, positional=None):
-            if positional is not None:
-                self.positional = positional.split(' ')
+        def run(self, positional=None, optional=None, tail=None):
+            self.positional = positional.split() if positional is not None else None
+            self.optional = optional.split() if optional is not None else None
+            self.tail = tail if tail is not None else None
 
             def decorator(fn):
                 self.run_fn = fn
@@ -117,7 +134,11 @@ class cli:
                 subcommands = {k: v.render() for k,v in self.subcommands.items()},
                 short = self.short,
                 long = long_description,
-                arguments = self.positional,
+                arguments = {
+                    'positional':self.positional,
+                    'optional': self.optional,
+                    'tail': self.tail,
+                }
             )
                 
     #end Command
@@ -161,16 +182,14 @@ add = root.subcommand('add', "adds two numbers")
     positional="a b",
 )
 def add_cmd(context, a, b):
-    return int(a)+int(b)
+    return a+b
 
-mul = root.subcommand('mul', "multiplier")
-@mul.run()
-def add_cmd(context, a,b):
-    """multiplies two numbers, slow"""
-    yield "nearly"
-    yield int(a)*int(b)
+echo = root.subcommand('echo', "echo")
+@echo.run(positional="", optional="", tail="line")
+def add_cmd(context, line):
+    return " ".join(line)
 
-ev = root.subcommand('echo', "line at a time echo")
+ev = root.subcommand('echoline', "line at a time echo")
 @ev.run()
 async def eval_cmd(context):
     async for msg in context.stdin():
