@@ -18,6 +18,45 @@ def try_num(arg):
 def extract_args(template, argv):
     return args
 
+def parse_argspec(argspec):
+    positional = []
+    optional = []
+    tail = None
+    flags = []
+    args = argspec.split()
+
+    nargs = len(args) 
+    while args: # flags
+        if not args[0].startswith('--'): break
+        arg = args.pop(0)
+        if arg.endswith(('...', '?')): raise Exception('badarg')
+        flags.append(arg[2:])
+
+    while args: # positional
+        if args[0].endswith(('...', '?')): break
+        arg = args.pop(0)
+        if arg.startswith('--'): raise Exception('badarg')
+        positional.append(arg)
+
+    while args: # optional
+        if args[0].endswith('...'): break
+        arg = args.pop(0)
+        if arg.startswith('--'): raise Exception('badarg')
+        if not arg.endswith('?'): raise Exception('badarg')
+        optional.append(arg[:-1])
+
+    if args: # tail
+        arg = args.pop(0)
+        if arg.startswith('--'): raise Exception('badarg')
+        if arg.endswith('?'): raise Exception('badarg')
+        if not arg.endswith('...'): raise Exception('badarg')
+        tail = arg[:-3]
+
+    if args:
+        raise Exception('bad argspec')
+
+    return nargs, {'positional': positional, 'optional': optional , 'tail': tail, 'flags': flags }
+
 
 class wire:
     class Result:
@@ -44,7 +83,7 @@ class wire:
         def invoke(self, path,argv, environ):
             if argv and argv[0] == "help":
                 action = self.invoke(path, argv[1:], environ)
-                return wire.Action("help", action.path, {})
+                return wire.Action("help", action.path, {'manual': True})
             if argv and argv[0] in self.subcommands:
                 return self.subcommands[argv[0]].invoke(path+[argv[0]], argv[1:], environ)
 
@@ -57,7 +96,7 @@ class wire:
                     if '=' in arg:
                         key, value = arg[2:].split('=',1)
                     else:
-                        key, value = arg[2:], ()
+                        key, value = arg[2:], None
                     if key not in flags:
                         flags[key] = []
                     flags[key].append(value)
@@ -65,7 +104,10 @@ class wire:
                     options.append(arg)
 
             if 'help' in flags:
-                return wire.Action("help", path, {})
+                return wire.Action("help", path, {'usage':True})
+
+            if not self.options:
+                return wire.Action("help", path, {'usage':True})
 
             for name in self.options['flags']:
                 if name not in flags:
@@ -74,20 +116,20 @@ class wire:
 
                 key, values = name, flags.pop(name)
                 if not values or values[0] is None:
-                    return wire.Action("error", path, args, errors=("missing value for option flag {}".format(k),))
+                    return wire.Action("error", path, {'usage':True}, errors=("missing value for option flag {}".format(key),))
                 if len(values) > 1:
-                    return wire.Action("error", path, args, errors=("duplicate option flag for: {}".format(key, ", ".join(repr(v) for v in values)),))
+                    return wire.Action("error", path, {'usage':True}, errors=("duplicate option flag for: {}".format(key, ", ".join(repr(v) for v in values)),))
 
                 args[key] = try_num(value)
 
             if flags:
-                return wire.Action("error", path, args, errors=("unknown option flags: --{}".format("".join(flags)),))
+                return wire.Action("error", path, {'usage': True}, errors=("unknown option flags: --{}".format("".join(flags)),))
 
 
             if self.options['positional']:
                 for name in self.options['positional']:
                     if not options: 
-                        return wire.Action("error", path, args, errors=("missing option: {}".format(name),))
+                        return wire.Action("error", path, {'usage':'True'}, errors=("missing option: {}".format(name),))
 
                     args[name] = try_num(options.pop(0))
 
@@ -108,7 +150,7 @@ class wire:
             if not options:
                 return wire.Action("call", path, args)
             else:
-                return wire.Action("error", path, args, errors=("unrecognised option: {!r}".format(" ".join(options)),))
+                return wire.Action("error", path, {'usage':True}, errors=("unrecognised option: {!r}".format(" ".join(options)),))
 
         def help(self, path, *, usage=False):
             if path and path[0] in self.subcommands:
@@ -129,6 +171,11 @@ class wire:
             output.append(self.usage())
             output.append("")
 
+            if self.long:
+                output.append('description:')
+                output.append(self.long)
+                output.append("")
+
             if self.subcommands:
                 output.append("commands:")
                 for cmd in self.subcommands.values():
@@ -140,14 +187,15 @@ class wire:
             args = []
             if self.subcommands:
                 args.append('<command>')
-            if self.options['flags']:
-                args.extend("[--{0}=<{0}>]".format(o) for o in self.options['flags'])
-            if self.options['positional']:
-                args.extend("<{}>".format(o) for o in self.options['positional'])
-            if self.options['optional']:
-                args.extend("[<{}>]".format(o) for o in self.options['optional'])
-            if self.options['tail']:
-                args.append("[<{}>...]".format(self.options['tail']))
+            if self.options:
+                if self.options['flags']:
+                    args.extend("[--{0}=<{0}>]".format(o) for o in self.options['flags'])
+                if self.options['positional']:
+                    args.extend("<{}>".format(o) for o in self.options['positional'])
+                if self.options['optional']:
+                    args.extend("[<{}>]".format(o) for o in self.options['optional'])
+                if self.options['tail']:
+                    args.append("[<{}>...]".format(self.options['tail']))
 
             full_name = list(self.prefix)
             full_name.append(self.name)
@@ -162,10 +210,7 @@ class cli:
             self.subcommands = {}
             self.run_fn = None
             self.short = short
-            self.positional = None
-            self.optional = None
-            self.tail = None
-            self.flags = None
+            self.options = None
             self.nargs = 0
 
         def subcommand(self, name, short):
@@ -185,50 +230,21 @@ class cli:
             else:
                 return wire.Result(-1, "bad options")
 
-        def args(argspec):
-            positional = []
-            optional = []
-            tail = None
-            flags = []
-            args = argspec.split()
+        def run(self, argspec=None):
 
-            while args:
-                if not args[0].startswith('--'): break
-
-
-            while args:
-                if args[0].endswith(('...', '?')): break
-
-            while args:
-                if args[0].endswith('...'): break
-
-            if args:
-                raise Exception('bad argspec')
-            return self.run(" ".join(positional), " ".join(optional), " ".join(tail), " ".join(flags))
-
-
-        def run(self, positional=None, optional=None, tail=None, flags=None):
-            self.positional = positional.split() if positional is not None else []
-            self.optional = optional.split() if optional is not None else []
-            self.tail = tail if tail else None
-            self.flags = flags.split() if flags is not None else []
-            self.nargs = sum([
-                (len(self.positional) if self.positional else 0),
-                (len(self.optional) if self.optional else 0),
-                (1 if self.tail else 0),
-                (len(self.flags) if self.flags else 0),
-            ])
+            if argspec is not None:
+                self.nargs, self.options = parse_argspec(argspec)
 
             def decorator(fn):
                 self.run_fn = fn
 
                 args = list(self.run_fn.__code__.co_varnames[:self.run_fn.__code__.co_argcount])
-                if args and args[0] == 'context': args.pop(0)
+                if args and args[0] == 'context':
+                    args.pop(0)
                 args = [a for a in args if not a.startswith('_')]
                 
-                if not any((self.positional, self.optional, self.tail, self.flags)):
-                    self.positional = args
-                    self.optional, self.tail, self.flags = None, None, None
+                if not self.options:
+                    self.options = {'positional': args, 'optional': [] , 'tail': None, 'flags': []}
                     self.nargs = len(args)
                 else:
                     if self.nargs != len(args):
@@ -238,19 +254,14 @@ class cli:
             return decorator
 
         def render(self):
-            long_description =self.run_fn.__doc__ if self.run_fn else self.short
+            long_description =self.run_fn.__doc__ if self.run_fn else None
             return wire.Command(
                 name = self.name,
                 prefix = self.prefix,
                 subcommands = {k: v.render() for k,v in self.subcommands.items()},
                 short = self.short,
                 long = long_description,
-                options = {
-                    'positional':self.positional,
-                    'optional': self.optional,
-                    'tail': self.tail,
-                    'flags': self.flags,
-                }
+                options = self.options, 
             )
                 
     #end Command
@@ -264,10 +275,10 @@ class cli:
         action = obj.invoke([], argv, environ)
     
         if action.mode == "help":
-            result = obj.help(action.path)
+            result = obj.help(action.path, usage=action.argv.get('usage'))
         elif action.mode == "error":
             print("error: {}".format(", ".join(action.errors)))
-            result = obj.help(action.path, usage=True)
+            result = obj.help(action.path, usage=action.argv.get('usage'))
         elif action.mode == "call":
             result = root.call(action.path, action.argv)
 
@@ -287,18 +298,21 @@ class cli:
 
 root = cli.Command('example', 'cli example programs')
 
+nop = root.subcommand('nop', 'nothing')
+
 add = root.subcommand('add', "adds two numbers")
 
-@add.args("a b")
+@add.run("a b")
 def add_cmd(context, a, b):
     return a+b
 
 echo = root.subcommand('echo', "echo")
-@echo.args("--reverse line...")
-def add_cmd(context, line, reverse):
+@echo.run("--reverse line...")
+def echocmd(context, line, reverse):
+    """echo all arguments"""
     if reverse:
         return (" ".join(line))[::-1]
-    return " ".join(line)
+    return " ".join(str(x) for x in line)
 
 ev = root.subcommand('cat', "line at a time echo")
 @ev.run()
