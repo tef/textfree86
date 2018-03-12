@@ -67,20 +67,18 @@ class wire:
             if 'help' in flags:
                 return wire.Action("help", path, {})
 
-            check_options = True
-
             for name in self.options['flags']:
                 if name not in flags:
                     args[name] = None
                     continue
 
                 key, values = name, flags.pop(name)
-                if not values:
+                if not values or values[0] is None:
                     return wire.Action("error", path, args, errors=("missing value for option flag {}".format(k),))
                 if len(values) > 1:
-                    return wire.Action("error", path, args, errors=("duplicate values for {}: {}".format(key, ", ".join(repr(v) for v in values)),))
-                elif key in self.options['flags']:
-                    args[key] = try_num(value)
+                    return wire.Action("error", path, args, errors=("duplicate option flag for: {}".format(key, ", ".join(repr(v) for v in values)),))
+
+                args[key] = try_num(value)
 
             if flags:
                 return wire.Action("error", path, args, errors=("unknown option flags: --{}".format("".join(flags)),))
@@ -187,6 +185,28 @@ class cli:
             else:
                 return wire.Result(-1, "bad options")
 
+        def args(argspec):
+            positional = []
+            optional = []
+            tail = None
+            flags = []
+            args = argspec.split()
+
+            while args:
+                if not args[0].startswith('--'): break
+
+
+            while args:
+                if args[0].endswith(('...', '?')): break
+
+            while args:
+                if args[0].endswith('...'): break
+
+            if args:
+                raise Exception('bad argspec')
+            return self.run(" ".join(positional), " ".join(optional), " ".join(tail), " ".join(flags))
+
+
         def run(self, positional=None, optional=None, tail=None, flags=None):
             self.positional = positional.split() if positional is not None else []
             self.optional = optional.split() if optional is not None else []
@@ -269,12 +289,12 @@ root = cli.Command('example', 'cli example programs')
 
 add = root.subcommand('add', "adds two numbers")
 
-@add.run(positional="a b",)
+@add.args("a b")
 def add_cmd(context, a, b):
     return a+b
 
 echo = root.subcommand('echo', "echo")
-@echo.run(positional="", optional="", tail="line", flags='reverse')
+@echo.args("--reverse line...")
 def add_cmd(context, line, reverse):
     if reverse:
         return (" ".join(line))[::-1]
