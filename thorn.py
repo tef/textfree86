@@ -234,37 +234,90 @@ class wire:
                 for v in values:
                     args[key].append(try_parse(value, self.options['argtypes'].get(name)))
 
+            named_args = False
+            if flags:
+                for name in self.options['positional']:
+                    if name in flags:
+                        named_args = True
+                        break
+                for name in self.options['optional']:
+                    if name in flags:
+                        named_args = True
+                        break
+                if self.options['tail'] in flags:
+                    named_args = True
+                        
+            if named_args:
+                for name in self.options['positional']:
+                    args[name] = None
+                    if name not in flags:
+                        return wire.Action("error", path, {'usage':'True'}, errors=("missing named option: {}".format(name),))
+
+                    key, values = name, flags.pop(name)
+                    if not values or values[0] is None:
+                        return wire.Action("error", path, {'usage':True}, errors=("missing value for named option {}".format(key),))
+                    if len(values) > 1:
+                        return wire.Action("error", path, {'usage':True}, errors=("duplicate named option for: {}".format(key, ", ".join(repr(v) for v in values)),))
+
+                    args[key] = try_parse(value, self.options['argtypes'].get(key))
+
+                for name in self.options['optional']:
+                    args[name] = None
+                    if name not in flags:
+                        continue
+
+                    key, values = name, flags.pop(name)
+                    if not values or values[0] is None:
+                        return wire.Action("error", path, {'usage':True}, errors=("missing value for named option {}".format(key),))
+                    if len(values) > 1:
+                        return wire.Action("error", path, {'usage':True}, errors=("duplicate named option for: {}".format(key, ", ".join(repr(v) for v in values)),))
+
+                    args[key] = try_parse(value, self.options['argtypes'].get(key))
+
+                name = self.options['tail']
+                if name and name in flags:
+                    args[name] = []
+
+                    key, values = name, flags.pop(name)
+                    if not values or None in values:
+                        return wire.Action("error", path, {'usage':True}, errors=("missing value for named option  {}".format(key),))
+
+                    for v in values:
+                        args[key].append(try_parse(value, self.options['argtypes'].get(name)))
+                
+
+            else:
+                if self.options['positional']:
+                    for name in self.options['positional']:
+                        if not options: 
+                            return wire.Action("error", path, {'usage':'True'}, errors=("missing option: {}".format(name),))
+
+                        args[name] = try_parse(options.pop(0),self.options['argtypes'].get(name))
+
+                if self.options['optional']:
+                    for name in self.options['optional']:
+                        if not options: 
+                            args[name] = None
+                        else:
+                            args[name] = try_parse(options.pop(0), self.options['argtypes'].get(name))
+
+                if self.options['tail']:
+                    tail = []
+                    name = self.options['tail']
+                    tailtype = self.options['argtypes'].get(name)
+                    while options:
+                        tail.append(try_parse(options.pop(0), tailtype))
+
+                    args[name] = tail
+
             if flags:
                 return wire.Action("error", path, {'usage': True}, errors=("unknown option flags: --{}".format("".join(flags)),))
 
-
-            if self.options['positional']:
-                for name in self.options['positional']:
-                    if not options: 
-                        return wire.Action("error", path, {'usage':'True'}, errors=("missing option: {}".format(name),))
-
-                    args[name] = try_parse(options.pop(0),self.options['argtypes'].get(name))
-
-            if self.options['optional']:
-                for name in self.options['optional']:
-                    if not options: 
-                        args[name] = None
-                    else:
-                        args[name] = try_parse(options.pop(0), self.options['argtypes'].get(name))
-
-            if self.options['tail']:
-                tail = []
-                name = self.options['tail']
-                tailtype = self.options['argtypes'].get(name)
-                while options:
-                    tail.append(try_parse(options.pop(0), tailtype))
-
-                args[name] = tail
-
-            if not options:
-                return wire.Action("call", path, args)
-            else:
+            if options and named_args:
+                return wire.Action("error", path, {'usage':True}, errors=("unnamed options given {!r}".format(" ".join(options)),))
+            if options:
                 return wire.Action("error", path, {'usage':True}, errors=("unrecognised option: {!r}".format(" ".join(options)),))
+            return wire.Action("call", path, args)
 
         def help(self, path, *, usage=False):
             if path and path[0] in self.subcommands:
