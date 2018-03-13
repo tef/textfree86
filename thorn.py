@@ -1,8 +1,30 @@
 import os
 import sys
 import types
+import itertools
 
-def try_num(arg):
+def try_parse(arg, argtype):
+    if argtype in ("int","integer"):
+        try:
+            i = int(arg)
+            if str(i) == arg: return i
+        except:
+            raise Exception('badarg')
+
+    elif argtype in ("float","num"):
+        try:
+            i = float(arg)
+            if str(i) == arg: return i
+        except:
+            raise Exception('badarg')
+    elif argtype in ("str", "string"):
+        return arg
+    elif argtype in ("bool", "boolean"):
+        if arg == "true":
+            return True
+        elif arg == "false":
+            return False
+        raise Exception('badarg')
     try:
         i = int(arg)
         if str(i) == arg: return i
@@ -19,43 +41,108 @@ def extract_args(template, argv):
     return args
 
 def parse_argspec(argspec):
+    """
+        argspec is a short description of a command's expected args:
+        "x y z"         three args (x,y,z) in that order
+        "x y? z?"       three args, where the second two are optional. 
+                        "arg1 arg2" is x=arg1, y=arg2, z=null
+        "x y z..."      three args (x,y,z) where the final arg can be repeated 
+                        "arg1 arg2 arg3 arg4" is z = [arg3, arg4]
+
+        an argspec comes in the following format, and order
+            <flags> <positional> <optional> <tail>
+
+        for a option named 'foo', a:
+            switch is '--foo?'
+                `cmd --foo` foo is True
+                `cmd`       foo is False
+            flag is `--foo`
+                `cmd --foo=x` foo is 'x'
+            list is `--foo...`
+                `cmd` foo is []
+                `cmd --foo=1 --foo=2` foo is [1,2]
+            positional is `foo`
+                `cmd x`, foo is `x`
+            optional is `foo?`
+                `cmd` foo is null
+                `cmd x` foo is x 
+            tail is `foo...`
+                `cmd` foo is []
+                `cmd 1 2 3` foo is [1,2,3] 
+    """
     positional = []
     optional = []
     tail = None
     flags = []
+    lists = []
+    switches = []
+
     args = argspec.split()
+
+    argtypes = {}
+    argnames = set()
+
+    def argname(arg):
+        if not arg:
+            return arg
+        if ':' in arg:
+            name, atype = arg.split(':')
+            argtypes[name] = atype 
+        else:
+            name = arg
+        if name in argnames:
+            raise Exception('duplicate arg name')
+        argnames.add(name)
+        return name
 
     nargs = len(args) 
     while args: # flags
         if not args[0].startswith('--'): break
         arg = args.pop(0)
-        if arg.endswith(('...', '?')): raise Exception('badarg')
-        flags.append(arg[2:])
+        if arg.endswith('?'):
+            if ':' in arg:
+                raise Exception('switches have types')
+            switches.append(argname(arg[2:-1]))
+        elif arg.endswith('...'):
+            lists.append(argname(arg[2:-3]))
+        else:
+            flags.append(argname(arg[2:]))
 
     while args: # positional
         if args[0].endswith(('...', '?')): break
         arg = args.pop(0)
         if arg.startswith('--'): raise Exception('badarg')
-        positional.append(arg)
+        positional.append(argname(arg))
 
     while args: # optional
         if args[0].endswith('...'): break
         arg = args.pop(0)
         if arg.startswith('--'): raise Exception('badarg')
         if not arg.endswith('?'): raise Exception('badarg')
-        optional.append(arg[:-1])
+        optional.append(argname(arg[:-1]))
 
     if args: # tail
         arg = args.pop(0)
         if arg.startswith('--'): raise Exception('badarg')
         if arg.endswith('?'): raise Exception('badarg')
         if not arg.endswith('...'): raise Exception('badarg')
-        tail = arg[:-3]
+        tail = argname(arg[:-3])
 
     if args:
         raise Exception('bad argspec')
+    
 
-    return nargs, {'positional': positional, 'optional': optional , 'tail': tail, 'flags': flags }
+    # check names are valid identifiers
+
+    return nargs, {
+            'switches': switches,
+            'flags': flags,
+            'lists': lists,
+            'positional': positional, 
+            'optional': optional , 
+            'tail': tail, 
+            'argtypes': argtypes,
+    }
 
 
 class wire:
@@ -109,9 +196,22 @@ class wire:
             if not self.options:
                 return wire.Action("help", path, {'usage':True})
 
-            for name in self.options['flags']:
+            for name in self.options['switches']:
+                args[name] = False
                 if name not in flags:
-                    args[name] = None
+                    continue
+
+                key, values = name, flags.pop(name)
+                if not values or values[0] is not None:
+                    return wire.Action("error", path, {'usage':True}, errors=("value given for switch flag {}".format(key),))
+                if len(values) > 1:
+                    return wire.Action("error", path, {'usage':True}, errors=("duplicate switch flag for: {}".format(key, ", ".join(repr(v) for v in values)),))
+
+                args[key] = True
+
+            for name in self.options['flags']:
+                args[name] = None
+                if name not in flags:
                     continue
 
                 key, values = name, flags.pop(name)
@@ -120,7 +220,19 @@ class wire:
                 if len(values) > 1:
                     return wire.Action("error", path, {'usage':True}, errors=("duplicate option flag for: {}".format(key, ", ".join(repr(v) for v in values)),))
 
-                args[key] = try_num(value)
+                args[key] = try_parse(value, self.options['argtypes'].get(key))
+
+            for name in self.options['lists']:
+                args[name] = []
+                if name not in flags:
+                    continue
+
+                key, values = name, flags.pop(name)
+                if not values or None in values:
+                    return wire.Action("error", path, {'usage':True}, errors=("missing value for list flag {}".format(key),))
+
+                for v in values:
+                    args[key].append(try_parse(value, self.options['argtypes'].get(name)))
 
             if flags:
                 return wire.Action("error", path, {'usage': True}, errors=("unknown option flags: --{}".format("".join(flags)),))
@@ -131,21 +243,23 @@ class wire:
                     if not options: 
                         return wire.Action("error", path, {'usage':'True'}, errors=("missing option: {}".format(name),))
 
-                    args[name] = try_num(options.pop(0))
+                    args[name] = try_parse(options.pop(0),self.options['argtypes'].get(name))
 
             if self.options['optional']:
                 for name in self.options['optional']:
                     if not options: 
                         args[name] = None
                     else:
-                        args[name] = try_num(options.pop(0))
+                        args[name] = try_parse(options.pop(0), self.options['argtypes'].get(name))
 
             if self.options['tail']:
                 tail = []
+                name = self.options['tail']
+                tailtype = self.options['argtypes'].get(name)
                 while options:
-                    tail.append(try_num(options.pop(0)))
+                    tail.append(try_parse(options.pop(0), tailtype))
 
-                args[self.options['tail']] = tail
+                args[name] = tail
 
             if not options:
                 return wire.Action("call", path, args)
@@ -188,8 +302,12 @@ class wire:
             if self.subcommands:
                 args.append('<command>')
             if self.options:
+                if self.options['switches']:
+                    args.extend("[--{0}]".format(o) for o in self.options['switches'])
                 if self.options['flags']:
                     args.extend("[--{0}=<{0}>]".format(o) for o in self.options['flags'])
+                if self.options['lists']:
+                    args.extend("[--{0}=<{0}>...]".format(o) for o in self.options['lists'])
                 if self.options['positional']:
                     args.extend("<{}>".format(o) for o in self.options['positional'])
                 if self.options['optional']:
@@ -225,13 +343,18 @@ class cli:
                 return self.help(path[1:])
             elif path and path[0] in self.subcommands:
                 return self.subcommands[path[0]].call(path[1:], argv)
-            elif self.run_fn and len(argv) == self.nargs:
-                return self.run_fn({}, **argv)
+            elif self.run_fn:
+                if len(argv) == self.nargs:
+                    return self.run_fn({}, **argv)
+                else:
+                    return wire.Result(-1, "bad options")
             else:
-                return wire.Result(-1, "bad options")
+                if len(argv) == 0:
+                    return self.render().manual()
+                else:
+                    return wire.Result(-1, self.render.usage())
 
         def run(self, argspec=None):
-
             if argspec is not None:
                 self.nargs, self.options = parse_argspec(argspec)
 
@@ -307,12 +430,12 @@ def add_cmd(context, a, b):
     return a+b
 
 echo = root.subcommand('echo', "echo")
-@echo.run("--reverse line...")
+@echo.run("--reverse? line:str...")
 def echocmd(context, line, reverse):
     """echo all arguments"""
     if reverse:
-        return (" ".join(line))[::-1]
-    return " ".join(str(x) for x in line)
+        return (" ".join(x for x in line))[::-1]
+    return " ".join(x for x in line)
 
 ev = root.subcommand('cat', "line at a time echo")
 @ev.run()
@@ -320,5 +443,18 @@ async def eval_cmd(context):
     async for msg in context.stdin():
         await context.stdout.write(msg)
 
+demo = root.subcommand('demo', "demo of argspec")
+@demo.run('--switch? --value --bucket... pos1 opt1? opt2? tail...')
+def run(context, switch, value, bucket, pos1, opt1, opt2, tail):
+    output = [ 
+            "\tswitch:{}".format(switch),
+            "\tvalue:{}".format(value),
+            "\tbucket:{}".format(bucket),
+            "\tpos1:{}".format(pos1),
+            "\topt1:{}".format(opt1),
+            "\topt2:{}".format(opt2),
+            "\ttail:{}".format(tail),
+    ]
+    return "\n".join(output)
 if __name__ == '__main__':
     cli.main(root)
