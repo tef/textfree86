@@ -202,12 +202,15 @@ class wire:
                     continue
 
                 key, values = name, flags.pop(name)
-                if not values or values[0] is not None:
+                if not values: 
                     return wire.Action("error", path, {'usage':True}, errors=("value given for switch flag {}".format(key),))
                 if len(values) > 1:
                     return wire.Action("error", path, {'usage':True}, errors=("duplicate switch flag for: {}".format(key, ", ".join(repr(v) for v in values)),))
 
-                args[key] = True
+                if values[0] is None:
+                    args[key] = True
+                else:
+                    args[key] = try_parse(values[0], "boolean")
 
             for name in self.options['flags']:
                 args[name] = None
