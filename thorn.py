@@ -76,13 +76,26 @@ def parse_argspec(argspec):
     flags = []
     lists = []
     switches = []
+    descriptions = {}
 
-    args = argspec.split()
+    if '\n' in argspec:
+        args = [line for line in argspec.split('\n') if line]
+    else:
+        if argspec.count('#') > 0:
+            raise Exception('badargspec')
+        args = [x for x in argspec.split()]
 
     argtypes = {}
     argnames = set()
 
-    def argname(arg):
+    def argdesc(arg):
+        if '#' in arg:
+            arg, desc = arg.split('#', 1)
+            return arg.strip(), desc.strip()
+        else:
+            return arg.strip(), None
+
+    def argname(arg, desc):
         if not arg:
             return arg
         if ':' in arg:
@@ -93,40 +106,54 @@ def parse_argspec(argspec):
         if name in argnames:
             raise Exception('duplicate arg name')
         argnames.add(name)
+        if desc:
+            descriptions[name] = desc
         return name
 
     nargs = len(args) 
     while args: # flags
-        if not args[0].startswith('--'): break
-        arg = args.pop(0)
+        arg, desc = argdesc(args[0])
+        if not arg.startswith('--'): 
+            break
+        else:
+            args.pop(0)
         if arg.endswith('?'):
             if ':' in arg:
-                raise Exception('switches have types')
-            switches.append(argname(arg[2:-1]))
+                raise Exception('switches cant have types')
+            switches.append(argname(arg[2:-1], desc))
         elif arg.endswith('...'):
-            lists.append(argname(arg[2:-3]))
+            lists.append(argname(arg[2:-3], desc))
         else:
-            flags.append(argname(arg[2:]))
+            flags.append(argname(arg[2:],desc))
 
     while args: # positional
-        if args[0].endswith(('...', '?')): break
-        arg = args.pop(0)
+        arg, desc = argdesc(args[0])
         if arg.startswith('--'): raise Exception('badarg')
-        positional.append(argname(arg))
+
+        if arg.endswith(('...', '?')): 
+            break
+        else:
+            args.pop(0)
+
+        positional.append(argname(arg, desc))
 
     while args: # optional
-        if args[0].endswith('...'): break
-        arg = args.pop(0)
+        arg, desc = argdesc(args[0])
         if arg.startswith('--'): raise Exception('badarg')
+        if arg.endswith('...'): 
+            break
+        else:
+            args.pop(0)
         if not arg.endswith('?'): raise Exception('badarg')
-        optional.append(argname(arg[:-1]))
+
+        optional.append(argname(arg[:-1], desc))
 
     if args: # tail
-        arg = args.pop(0)
+        arg, desc = argdesc(args.pop(0))
         if arg.startswith('--'): raise Exception('badarg')
         if arg.endswith('?'): raise Exception('badarg')
         if not arg.endswith('...'): raise Exception('badarg')
-        tail = argname(arg[:-3])
+        tail = argname(arg[:-3], desc)
 
     if args:
         raise Exception('bad argspec')
@@ -142,6 +169,7 @@ def parse_argspec(argspec):
             'optional': optional , 
             'tail': tail, 
             'argtypes': argtypes,
+            'descriptions' : descriptions,
     }
 
 
@@ -346,6 +374,12 @@ class wire:
                 output.append(self.long)
                 output.append("")
 
+            if self.options['descriptions']:
+                output.append('options:')
+                for name, desc in self.options['descriptions'].items():
+                    output.append('\t{}\t{}'.format(name, desc))
+                output.append('')
+
             if self.subcommands:
                 output.append("commands:")
                 for cmd in self.subcommands.values():
@@ -498,6 +532,28 @@ ev = root.subcommand('cat', "line at a time echo")
 async def eval_cmd(context):
     async for msg in context.stdin():
         await context.stdout.write(msg)
+demo2 = root.subcommand('demo2', "demo of argspec")
+@demo2.run('''
+    --switch?       # a demo switch
+    --value:str     # pass with --value=...
+    --bucket:int... # a list of numbers 
+    pos1            # positional
+    opt1?           # optional 1
+    opt2?           # optional 2
+    tail...         # tail arg
+''')
+def run(context, switch, value, bucket, pos1, opt1, opt2, tail):
+    """a demo command that shows all the types of options"""
+    output = [ 
+            "\tswitch:{}".format(switch),
+            "\tvalue:{}".format(value),
+            "\tbucket:{}".format(bucket),
+            "\tpos1:{}".format(pos1),
+            "\topt1:{}".format(opt1),
+            "\topt2:{}".format(opt2),
+            "\ttail:{}".format(tail),
+    ]
+    return "\n".join(output)
 
 demo = root.subcommand('demo', "demo of argspec")
 @demo.run('--switch? --value --bucket... pos1 opt1? opt2? tail...')
