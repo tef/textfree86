@@ -20,7 +20,7 @@ def echocmd(context, line, reverse):
         return (" ".join(x for x in line))[::-1]
     return " ".join(x for x in line)
 
-demo2 = root.subcommand('demo2', "demo of argspec")
+demo2 = root.subcommand('demo', "demo of argspec")
 @demo2.run('''
     --switch?       # a demo switch
     --value:str     # pass with --value=...
@@ -43,7 +43,7 @@ def run(context, switch, value, bucket, pos1, opt1, opt2, tail):
     ]
     return "\n".join(output)
 
-demo = root.subcommand('demo', "demo of argspec")
+demo = demo2.subcommand('demo', "demo of argspec")
 @demo.run('--switch? --value --bucket... pos1 opt1? opt2? tail...')
 def run(context, switch, value, bucket, pos1, opt1, opt2, tail):
     output = [ 

@@ -201,12 +201,11 @@ class wire:
             self.options = options
 
 
-        def invoke(self, path,argv, environ):
-            if argv and argv[0] == "help":
-                action = self.invoke(path, argv[1:], environ)
-                return wire.Action("help", action.path, {'manual': True})
+        def version(self):
+            return "<None>"
+        def parse_args(self, path,argv, environ):
             if argv and argv[0] in self.subcommands:
-                return self.subcommands[argv[0]].invoke(path+[argv[0]], argv[1:], environ)
+                return self.subcommands[argv[0]].parse_args(path+[argv[0]], argv[1:], environ)
 
             if not self.options:
                 # no options, print usage
@@ -525,14 +524,32 @@ class cli:
         argv = sys.argv[1:]
         environ = os.environ
 
-        if argv and argv[0] == '--version':
-            print("ha!")
-            sys.exit(1)
-
         obj = root.render()
+        use_help = False
+        if argv and argv[0] == "help":
+            argv.pop(0)
+            use_help = True
 
-        action = obj.invoke([], argv, environ)
+        if argv and ':' in argv[0]:
+            arg = argv.pop(0)
+            idx = arg.find(':',1)
+            args = []
+            while 0 < idx < len(arg) -1:
+                head, arg = arg[:idx], arg[idx:]
+                args.append(head)
+                idx = arg.find(':', idx+1)
+            args.append(arg)
+            args.extend(argv)
+            argv = args
+
+        if argv and argv[0] == '--version':
+            action = wire.Action("version", [], {})
+        else:
+            action = obj.parse_args([], argv, environ)
     
+        if use_help:
+            action = wire.Action("help", action.path, {'manual': True})
+
         if action.mode == "help":
             result = obj.help(action.path, usage=action.argv.get('usage'))
         elif action.mode == "error":
@@ -540,6 +557,8 @@ class cli:
             result = obj.help(action.path, usage=action.argv.get('usage'))
         elif action.mode == "call":
             result = root.call(action.path, action.argv)
+        elif action.mode == "version":
+            result = obj.version()
 
         if isinstance(result, wire.Result):
             exit_code = result.exit_code
