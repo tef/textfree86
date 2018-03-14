@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from textfree86 import cli
 
 demo = cli.Command('demo', 'cli example programs')
@@ -24,5 +25,14 @@ def run(context, switch, value, bucket, pos1, opt1, opt2, tail):
     ]
     return "\n".join(output)
 
+one = demo.subcommand(':one','nothing')
+@one.run()
+def one_run(context):
+    return ":one"
+
+one = demo.subcommand('one','nothing')
+@one.run()
+def one_run(context):
+    return "one"
 if __name__ == '__main__':
     cli.main(demo)
