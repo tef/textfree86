@@ -391,7 +391,7 @@ class wire:
             output = []
             full_name = list(self.prefix)
             full_name.append(self.name)
-            output.append("{}{}{}".format(" ".join(full_name), (" - " if self.short else ""), self.short))
+            output.append("{}{}{}".format(" ".join(full_name), (" - " if self.short else ""), self.short or ""))
 
             output.append("")
 
@@ -412,7 +412,7 @@ class wire:
             if self.subcommands:
                 output.append("commands:")
                 for cmd in self.subcommands.values():
-                    output.append("\t{.name}\t{}".format(cmd, cmd.short))
+                    output.append("\t{.name}\t{}".format(cmd, cmd.short or ""))
                 output.append("")
             return "\n".join(output)
 
@@ -444,12 +444,13 @@ class wire:
 
 class cli:
     class Command:
-        def __init__(self, name, short):
+        def __init__(self, name, short=None, long=None):
             self.name = name
             self.prefix = [] 
             self.subcommands = {}
             self.run_fn = None
             self.short = short
+            self.long = None
             self.argspec = None
             self.nargs = 0
 
@@ -464,10 +465,10 @@ class cli:
 
         def subgroup(self, group_name, prefix=True):
             class Group:
-                def subcommand(group, name, short):
+                def subcommand(group, name, short=None, long=None):
                     if prefix:
                         name = "{}:{}".format(group_name, name)
-                    cmd = cli.Command(name, short)
+                    cmd = cli.Command(name, short=short, long=long)
                     cmd.prefix.extend(self.prefix)
                     cmd.prefix.append(self.name)
                     self.subcommands[name] = cmd
@@ -498,13 +499,13 @@ class cli:
         # -- end of builder methods
 
         def render(self):
-            long_description =self.run_fn.__doc__ if self.run_fn else None
+            long =self.run_fn.__doc__ if (not self.long and self.run_fn) else self.long
             return wire.Command(
                 name = self.name,
                 prefix = self.prefix,
                 subcommands = {k: v.render() for k,v in self.subcommands.items()},
                 short = self.short,
-                long = long_description,
+                long = long,
                 argspec = self.argspec, 
             )
                 
