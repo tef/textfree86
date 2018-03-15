@@ -81,9 +81,24 @@ $ florb --one=one --two=two --three=three --three=four
 ["one", "two", ["three", "four]]
 ```
 
+### Subcommands
+
+`Command` can be nested, giving a `cmd one <args>` `cmd two <args>` like interface:
+``` 
+root = cli.Command('example', 'my program')
+
+subcommand = cli.subcommand('one', 'example subcommand')
+
+@subcommand.run(...)
+def subcommand_run(...):
+    ...
+```
+
+`cmd help one` `cmd one --help`, `cmd help two` `cmd two --help` will print out the manual and usage for `one` and `two` respectively.
+
 The parameter to `run()`, is called an argspec.
 
-## Parsing Command Line arguments with an Argspec
+## Parsing Command Line arguments.
 
 An argspec is a string that describes how to turn CLI arguments into a dictionary of name, value pairs. For example:
 
@@ -144,22 +159,7 @@ An untyped field tries to convert the argument to an integer or floating point n
 This might be a bad idea, but it is up to the client on how best to interpret arguments.  
 
 
-### Subcommands
-
-`Command` can be nested, giving a `cmd one <args>` `cmd two <args>` like interface:
-``` 
-root = cli.Command('example', 'my program')
-
-subcommand = cli.subcommand('one', 'example subcommand')
-
-@subcommand.run(...)
-def subcommand_run(...):
-    ...
-```
-
-`cmd help one` `cmd one --help`, `cmd help two` `cmd two --help` will print out the manual and usage for `one` and `two` respectively.
-
-## Files, Paths, Directories (Not Yet) 
+### Files, Paths, Directories (Not Yet) 
 
 Files can also be sent as command line arguments, or written to as output from the program.
 
@@ -170,7 +170,7 @@ def subcommand_run(data):
         ...
 ```
 
-## Environment Variables, Local Configuration (Not Yet)
+### Environment Variables, Local Configuration (Not Yet)
 
 Instead of positional options or option flags, program configuration can be stored in environment variables, or local files. These can be overridden by option flags too.
 
@@ -192,11 +192,11 @@ The `textfree86` client asks for the completition information, parses the comman
 $ textfree86 http://address/ -- help
 ```
 
-## Server
+### Server
 
-## Proxy
+### Proxy
 
-## API (Not Yet)
+### API (Not Yet)
 
 This project evolved from writing a CLI debugger for networked services. As I started writing option parsers inside the client, I realised I'd made a huge mistake. 
 
