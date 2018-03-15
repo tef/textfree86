@@ -16,7 +16,7 @@ def try_parse(name, arg, argtype):
             pass
         raise BadArg('{} expects an integer, got {}'.format(name, arg))
 
-    elif argtype in ("float","num"):
+    elif argtype in ("float","num", "number"):
         try:
             i = float(arg)
             if str(i) == arg: return i
@@ -477,7 +477,7 @@ class cli:
                 return self.subcommands[path[0]].call(path[1:], argv)
             elif self.run_fn:
                 if len(argv) == self.nargs:
-                    return self.run_fn({}, **argv)
+                    return self.run_fn(**argv)
                 else:
                     return wire.Result(-1, "bad options")
             else:
@@ -494,8 +494,8 @@ class cli:
                 self.run_fn = fn
 
                 args = list(self.run_fn.__code__.co_varnames[:self.run_fn.__code__.co_argcount])
-                if args and args[0] == 'context':
-                    args.pop(0)
+                # if args and args[0] == 'self':
+                #    args.pop(0)
                 args = [a for a in args if not a.startswith('_')]
                 
                 if not self.argspec:

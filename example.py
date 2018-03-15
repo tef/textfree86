@@ -4,17 +4,17 @@ root = cli.Command('example', 'cli example programs')
 
 nop = root.subcommand('nop', 'nothing')
 @nop.run()
-def nop(context):
+def nop():
     pass
 
 add = root.subcommand('add', "adds two numbers")
 @add.run("a b")
-def add_cmd(context, a, b):
+def add_cmd(a, b):
     return a+b
 
 echo = root.subcommand('echo', "echo")
 @echo.run("--reverse? line:str...")
-def echocmd(context, line, reverse):
+def echocmd(line, reverse):
     """echo all arguments"""
     if reverse:
         return (" ".join(x for x in line))[::-1]
@@ -30,7 +30,7 @@ demo2 = root.subcommand('demo', "demo of argspec")
     opt2?           # optional 2
     tail...         # tail arg
 ''')
-def run(context, switch, value, bucket, pos1, opt1, opt2, tail):
+def run(switch, value, bucket, pos1, opt1, opt2, tail):
     """a demo command that shows all the types of options"""
     output = [ 
             "\tswitch:{}".format(switch),
@@ -45,7 +45,7 @@ def run(context, switch, value, bucket, pos1, opt1, opt2, tail):
 
 demo = demo2.subcommand('demo', "demo of argspec")
 @demo.run('--switch? --value --bucket... pos1 opt1? opt2? tail...')
-def run(context, switch, value, bucket, pos1, opt1, opt2, tail):
+def run(switch, value, bucket, pos1, opt1, opt2, tail):
     output = [ 
             "\tswitch:{}".format(switch),
             "\tvalue:{}".format(value),
@@ -56,12 +56,6 @@ def run(context, switch, value, bucket, pos1, opt1, opt2, tail):
             "\ttail:{}".format(tail),
     ]
     return "\n".join(output)
-
-ev = root.subcommand('cat', "line at a time echo")
-@ev.run()
-async def eval_cmd(context):
-    async for msg in context.stdin():
-        await context.stdout.write(msg)
 
 if __name__ == '__main__':
     cli.main(root)

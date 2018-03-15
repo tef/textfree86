@@ -2,7 +2,6 @@
 from textfree86 import cli
 
 demo = cli.Command('demo', 'cli example programs')
-
 @demo.run('''
     --switch?       # a demo switch
     --value:str     # pass with --value=...
@@ -12,7 +11,7 @@ demo = cli.Command('demo', 'cli example programs')
     opt2?           # optional 2
     tail...         # tail arg
 ''')
-def run(context, switch, value, bucket, pos1, opt1, opt2, tail):
+def run(switch, value, bucket, pos1, opt1, opt2, tail):
     """a demo command that shows all the types of options"""
     output = [ 
             "\tswitch:{}".format(switch),
@@ -27,12 +26,12 @@ def run(context, switch, value, bucket, pos1, opt1, opt2, tail):
 
 one = demo.subcommand(':one','nothing')
 @one.run()
-def one_run(context):
+def one_run():
     return ":one"
 
 one = demo.subcommand('one','nothing')
 @one.run()
-def one_run(context):
+def one_run():
     return "one"
 if __name__ == '__main__':
     cli.main(demo)
