@@ -136,7 +136,7 @@ def parse_argspec(argspec):
     }
 
 
-def parse_args(argspec, path, argv, environ):
+def parse_args(argspec, argv, environ):
     options = []
     flags = {}
     args = {}
@@ -212,7 +212,7 @@ def parse_args(argspec, path, argv, environ):
         for name in argspec['positional']:
             args[name] = None
             if name not in flags:
-                return wire.Action("error", path, {'usage':'True'}, errors=("missing named option: {}".format(name),))
+                raise BadArg("missing named option: {}".format(name))
 
             values = flags.pop(name)
             if not values or values[0] is None:
@@ -247,12 +247,12 @@ def parse_args(argspec, path, argv, environ):
                 args[name].append(try_parse(name, value, argspec['argtypes'].get(name)))
     else:
         if flags:
-            return wire.Action("error", path, {'usage': True}, errors=("unknown option flags: --{}".format("".join(flags)),))
+            raise wire.BadArg("unknown option flags: --{}".format("".join(flags)))
 
         if argspec['positional']:
             for name in argspec['positional']:
                 if not options: 
-                    return wire.Action("error", path, {'usage':'True'}, errors=("missing option: {}".format(name),))
+                    raise wire.BadArg("missing option: {}".format(name))
 
                 args[name] = try_parse(name, options.pop(0),argspec['argtypes'].get(name))
 
@@ -276,7 +276,7 @@ def parse_args(argspec, path, argv, environ):
         raise wire.BadArg("unnamed options given {!r}".format(" ".join(options)))
     if options:
         raise wire.BadArg("unrecognised option: {!r}".format(" ".join(options)))
-    return wire.Action("call", path, args)
+    return args
 
 def try_parse(name, arg, argtype):
     if argtype in ("int","integer"):
@@ -319,6 +319,17 @@ class wire:
         def action(self, path):
             return wire.Action("error", path, {'usage':True}, errors=self.args)
 
+    class Argspec:
+        def __init__(self, switches, flags, lists, positional, optional, tail, argtypes, descriptions):
+            self.switches = switches
+            self.flags = flags
+            self.lists = lists
+            self.positional = positional
+            self.optional = optional 
+            self.tail = tail
+            self.argtypes = argtypes
+            self.descriptions = descriptions
+
     class Result:
         def __init__(self, exit_code, value):
             self.exit_code = exit_code
@@ -352,7 +363,7 @@ class wire:
                 if argv and argv[0]:
                     if argv[0] == "help":
                         return wire.Action("help", path, {'usage': False})
-                    elif argv[0] == "--help":
+                    elif "--help" in argv:
                         return wire.Action("help", path, {'usage': True})
                     elif self.subcommands:
                         return wire.Action("error", path, {'usage':True}, errors=("unknown command: {}".format(argv[0]),))
@@ -364,7 +375,8 @@ class wire:
                 if '--help' in argv:
                     return wire.Action("help", path, {'usage':True})
                 try:
-                    return parse_args(self.argspec, path, argv, environ)
+                    args = parse_args(self.argspec, argv, environ)
+                    return wire.Action("call", path, args)
                 except wire.BadArg as e:
                     return e.action(path)
 
