@@ -10,7 +10,7 @@ def try_parse(name, arg, argtype):
             if str(i) == arg: return i
         except:
             pass
-        raise BadArg('{} expects an integer, got {}'.format(name, arg))
+        raise wire.BadArg('{} expects an integer, got {}'.format(name, arg))
 
     elif argtype in ("float","num", "number"):
         try:
@@ -18,7 +18,7 @@ def try_parse(name, arg, argtype):
             if str(i) == arg: return i
         except:
             pass
-        raise BadArg('{} expects an floating-point number, got {}'.format(name, arg))
+        raise wire.BadArg('{} expects an floating-point number, got {}'.format(name, arg))
     elif argtype in ("str", "string"):
         return arg
     elif argtype in ("bool", "boolean"):
@@ -26,7 +26,7 @@ def try_parse(name, arg, argtype):
             return True
         elif arg == "false":
             return False
-        raise BadArg('{} expects either true or false, got {}'.format(name, arg))
+        raise wire.BadArg('{} expects either true or false, got {}'.format(name, arg))
     try:
         i = int(arg)
         if str(i) == arg: return i
@@ -172,6 +172,148 @@ def parse_argspec(argspec):
     }
 
 
+def parse_args(argspec, path, argv, environ):
+    options = []
+    flags = {}
+    args = {}
+
+    for arg in argv:
+        if arg.startswith('--'):
+            if '=' in arg:
+                key, value = arg[2:].split('=',1)
+            else:
+                key, value = arg[2:], None
+            if key not in flags:
+                flags[key] = []
+            flags[key].append(value)
+        else:
+            options.append(arg)
+
+    for name in argspec['switches']:
+        args[name] = False
+        if name not in flags:
+            continue
+
+        values = flags.pop(name)
+
+        if not values: 
+            raise wire.BadArg("value given for switch flag {}".format(name))
+        if len(values) > 1:
+            raise wire.BadArg("duplicate switch flag for: {}".format(name, ", ".join(repr(v) for v in values)))
+
+        if values[0] is None:
+            args[name] = True
+        else:
+            args[name] = try_parse(name, values[0], "boolean")
+
+    for name in argspec['flags']:
+        args[name] = None
+        if name not in flags:
+            continue
+
+        values = flags.pop(name)
+        if not values or values[0] is None:
+            raise wire.BadArg("missing value for option flag {}".format(name))
+        if len(values) > 1:
+            raise wire.BadArg("duplicate option flag for: {}".format(name, ", ".join(repr(v) for v in values)))
+
+        args[name] = try_parse(name, value, argspec['argtypes'].get(name))
+
+    for name in argspec['lists']:
+        args[name] = []
+        if name not in flags:
+            continue
+
+        values = flags.pop(name)
+        if not values or None in values:
+            raise wire.BadArg("missing value for list flag {}".format(name))
+
+        for value in values:
+            args[name].append(try_parse(name, value, argspec['argtypes'].get(name)))
+
+    named_args = False
+    if flags:
+        for name in argspec['positional']:
+            if name in flags:
+                named_args = True
+                break
+        for name in argspec['optional']:
+            if name in flags:
+                named_args = True
+                break
+        if argspec['tail'] in flags:
+            named_args = True
+                
+    if named_args:
+        for name in argspec['positional']:
+            args[name] = None
+            if name not in flags:
+                return wire.Action("error", path, {'usage':'True'}, errors=("missing named option: {}".format(name),))
+
+            values = flags.pop(name)
+            if not values or values[0] is None:
+                raise wire.BadArg("missing value for named option {}".format(name))
+            if len(values) > 1:
+                raise wire.BadArg("duplicate named option for: {}".format(name, ", ".join(repr(v) for v in values)))
+
+            args[name] = try_parse(name, value, argspec['argtypes'].get(name))
+
+        for name in argspec['optional']:
+            args[name] = None
+            if name not in flags:
+                continue
+
+            values = flags.pop(name)
+            if not values or values[0] is None:
+                raise wire.BadArg("missing value for named option {}".format(name))
+            if len(values) > 1:
+                raise wire.BadArg("duplicate named option for: {}".format(name, ", ".join(repr(v) for v in values)))
+
+            args[name] = try_parse(value, argspec['argtypes'].get(name))
+
+        name = argspec['tail']
+        if name and name in flags:
+            args[name] = []
+
+            values = flags.pop(name)
+            if not values or None in values:
+                raise wire.BadArg("missing value for named option  {}".format(name))
+
+            for v in values:
+                args[name].append(try_parse(name, value, argspec['argtypes'].get(name)))
+    else:
+        if flags:
+            return wire.Action("error", path, {'usage': True}, errors=("unknown option flags: --{}".format("".join(flags)),))
+
+        if argspec['positional']:
+            for name in argspec['positional']:
+                if not options: 
+                    return wire.Action("error", path, {'usage':'True'}, errors=("missing option: {}".format(name),))
+
+                args[name] = try_parse(name, options.pop(0),argspec['argtypes'].get(name))
+
+        if argspec['optional']:
+            for name in argspec['optional']:
+                if not options: 
+                    args[name] = None
+                else:
+                    args[name] = try_parse(name, options.pop(0), argspec['argtypes'].get(name))
+
+        if argspec['tail']:
+            tail = []
+            name = argspec['tail']
+            tailtype = argspec['argtypes'].get(name)
+            while options:
+                tail.append(try_parse(name, options.pop(0), tailtype))
+
+            args[name] = tail
+
+    if options and named_args:
+        raise wire.BadArg("unnamed options given {!r}".format(" ".join(options)))
+    if options:
+        raise wire.BadArg("unrecognised option: {!r}".format(" ".join(options)))
+    return wire.Action("call", path, args)
+
 class wire:
     class BadArg(Exception):
         def action(self, path):
@@ -200,6 +342,7 @@ class wire:
 
         def version(self):
             return "<None>"
+
         def parse_args(self, path,argv, environ):
             if argv and argv[0] in self.subcommands:
                 return self.subcommands[argv[0]].parse_args(path+[argv[0]], argv[1:], environ)
@@ -217,181 +360,13 @@ class wire:
                         return wire.Action("error", path, {'usage':True}, errors=("unknown option: {}".format(argv[0]),))
 
                 return wire.Action("help", path, {'usage': False})
-
-            options = []
-            flags = {}
-            args = {}
-
-            for arg in argv:
-                if arg.startswith('--'):
-                    if '=' in arg:
-                        key, value = arg[2:].split('=',1)
-                    else:
-                        key, value = arg[2:], None
-                    if key not in flags:
-                        flags[key] = []
-                    flags[key].append(value)
-                else:
-                    options.append(arg)
-
-            if 'help' in flags:
-                return wire.Action("help", path, {'usage':True})
-
-            for name in self.argspec['switches']:
-                args[name] = False
-                if name not in flags:
-                    continue
-
-                values = flags.pop(name)
-
-                if not values: 
-                    return wire.Action("error", path, {'usage':True}, errors=("value given for switch flag {}".format(name),))
-                if len(values) > 1:
-                    return wire.Action("error", path, {'usage':True}, errors=("duplicate switch flag for: {}".format(name, ", ".join(repr(v) for v in values)),))
-
-                if values[0] is None:
-                    args[name] = True
-                else:
-                    try:
-                        args[name] = try_parse(name, values[0], "boolean")
-                    except wire.BadArg as e:
-                        return e.action(path)
-
-            for name in self.argspec['flags']:
-                args[name] = None
-                if name not in flags:
-                    continue
-
-                values = flags.pop(name)
-                if not values or values[0] is None:
-                    return wire.Action("error", path, {'usage':True}, errors=("missing value for option flag {}".format(name),))
-                if len(values) > 1:
-                    return wire.Action("error", path, {'usage':True}, errors=("duplicate option flag for: {}".format(name, ", ".join(repr(v) for v in values)),))
-
+            else:
+                if '--help' in argv:
+                    return wire.Action("help", path, {'usage':True})
                 try:
-                    args[name] = try_parse(name, value, self.argspec['argtypes'].get(name))
+                    return parse_args(self.argspec, path, argv, environ)
                 except wire.BadArg as e:
                     return e.action(path)
-
-            for name in self.argspec['lists']:
-                args[name] = []
-                if name not in flags:
-                    continue
-
-                values = flags.pop(name)
-                if not values or None in values:
-                    return wire.Action("error", path, {'usage':True}, errors=("missing value for list flag {}".format(name),))
-
-                for value in values:
-                    try:
-                        args[name].append(try_parse(name, value, self.argspec['argtypes'].get(name)))
-                    except wire.BadArg as e:
-                        return e.action(path)
-
-            named_args = False
-            if flags:
-                for name in self.argspec['positional']:
-                    if name in flags:
-                        named_args = True
-                        break
-                for name in self.argspec['optional']:
-                    if name in flags:
-                        named_args = True
-                        break
-                if self.argspec['tail'] in flags:
-                    named_args = True
-                        
-            if named_args:
-                for name in self.argspec['positional']:
-                    args[name] = None
-                    if name not in flags:
-                        return wire.Action("error", path, {'usage':'True'}, errors=("missing named option: {}".format(name),))
-
-                    values = flags.pop(name)
-                    if not values or values[0] is None:
-                        return wire.Action("error", path, {'usage':True}, errors=("missing value for named option {}".format(name),))
-                    if len(values) > 1:
-                        return wire.Action("error", path, {'usage':True}, errors=("duplicate named option for: {}".format(name, ", ".join(repr(v) for v in values)),))
-
-                    try:
-                        args[name] = try_parse(name, value, self.argspec['argtypes'].get(name))
-                    except wire.BadArg as e:
-                        return e.action(path)
-
-                for name in self.argspec['optional']:
-                    args[name] = None
-                    if name not in flags:
-                        continue
-
-                    values = flags.pop(name)
-                    if not values or values[0] is None:
-                        return wire.Action("error", path, {'usage':True}, errors=("missing value for named option {}".format(name),))
-                    if len(values) > 1:
-                        return wire.Action("error", path, {'usage':True}, errors=("duplicate named option for: {}".format(name, ", ".join(repr(v) for v in values)),))
-
-                    try:
-                        args[name] = try_parse(value, self.argspec['argtypes'].get(name))
-                    except wire.BadArg as e:
-                        return e.action(path)
-
-
-                name = self.argspec['tail']
-                if name and name in flags:
-                    args[name] = []
-
-                    values = flags.pop(name)
-                    if not values or None in values:
-                        return wire.Action("error", path, {'usage':True}, errors=("missing value for named option  {}".format(name),))
-
-                    for v in values:
-                        try:
-                            args[name].append(try_parse(name, value, self.argspec['argtypes'].get(name)))
-                        except wire.BadArg as e:
-                            return e.action(path)
-
-                
-
-            else:
-                if self.argspec['positional']:
-                    for name in self.argspec['positional']:
-                        if not options: 
-                            return wire.Action("error", path, {'usage':'True'}, errors=("missing option: {}".format(name),))
-
-                        try:
-                            args[name] = try_parse(name, options.pop(0),self.argspec['argtypes'].get(name))
-                        except wire.BadArg as e:
-                            return e.action(path)
-
-                if self.argspec['optional']:
-                    for name in self.argspec['optional']:
-                        if not options: 
-                            args[name] = None
-                        else:
-                            try:
-                                args[name] = try_parse(name, options.pop(0), self.argspec['argtypes'].get(name))
-                            except wire.BadArg as e:
-                                return e.action(path)
-
-                if self.argspec['tail']:
-                    tail = []
-                    name = self.argspec['tail']
-                    tailtype = self.argspec['argtypes'].get(name)
-                    while options:
-                        try:
-                            tail.append(try_parse(name, options.pop(0), tailtype))
-                        except wire.BadArg as e:
-                            return e.action(path)
-
-                    args[name] = tail
-
-            if flags:
-                return wire.Action("error", path, {'usage': True}, errors=("unknown option flags: --{}".format("".join(flags)),))
-
-            if options and named_args:
-                return wire.Action("error", path, {'usage':True}, errors=("unnamed options given {!r}".format(" ".join(options)),))
-            if options:
-                return wire.Action("error", path, {'usage':True}, errors=("unrecognised option: {!r}".format(" ".join(options)),))
-            return wire.Action("call", path, args)
 
         def help(self, path, *, usage=False):
             if path and path[0] in self.subcommands:
@@ -529,21 +504,19 @@ class cli:
         environ = os.environ
 
         obj = root.render()
-        use_help = False
+
         if argv and argv[0] in ("help"):
             argv.pop(0)
             use_help = True
-
-        if argv and argv[0] == '--version':
+            action = obj.parse_args([], argv, environ)
+            action = wire.Action("help", action.path, {'manual': True})
+        elif argv and argv[0] == '--version':
             action = wire.Action("version", [], {})
         elif argv and argv[0] == '--help':
             action = wire.Action("help", [], {'usage': True})
         else:
             action = obj.parse_args([], argv, environ)
     
-        if use_help:
-            action = wire.Action("help", action.path, {'manual': True})
-
         if action.mode == "help":
             result = obj.help(action.path, usage=action.argv.get('usage'))
         elif action.mode == "error":
