@@ -59,11 +59,6 @@ Instead, `textfree86` only needs one URL (and maybe credentials) to run a comman
 A textfree86 program consists of `cli.Commands()`, chained together, used to decorate functions to dispatch:
 
 ```
-import textfree86
-
-For example, `one two? three...` describes one positional, one optional, and a tail option:
-
-```
 @cmd.run("one two? three...")
 def cmd_run(one, two, three):
     return [one, two, three]
