@@ -193,12 +193,12 @@ class wire:
             self.errors = errors
 
     class Command:
-        def __init__(self, prefix, name, subcommands, short, long, options):
+        def __init__(self, prefix, name, subcommands, short, long, argspec):
             self.prefix = prefix
             self.name = name
             self.subcommands = subcommands
             self.short, self.long = short, long
-            self.options = options
+            self.argspec = argspec
 
 
         def version(self):
@@ -207,8 +207,8 @@ class wire:
             if argv and argv[0] in self.subcommands:
                 return self.subcommands[argv[0]].parse_args(path+[argv[0]], argv[1:], environ)
 
-            if not self.options:
-                # no options, print usage
+            if not self.argspec:
+                # no argspec, print usage
                 if argv and argv[0]:
                     if self.subcommands:
                         return wire.Action("error", path, {'usage':True}, errors=("unknown command: {}".format(argv[0]),))
@@ -236,7 +236,7 @@ class wire:
             if 'help' in flags:
                 return wire.Action("help", path, {'usage':True})
 
-            for name in self.options['switches']:
+            for name in self.argspec['switches']:
                 args[name] = False
                 if name not in flags:
                     continue
@@ -256,7 +256,7 @@ class wire:
                     except BadArg as e:
                         return e.action(path)
 
-            for name in self.options['flags']:
+            for name in self.argspec['flags']:
                 args[name] = None
                 if name not in flags:
                     continue
@@ -268,11 +268,11 @@ class wire:
                     return wire.Action("error", path, {'usage':True}, errors=("duplicate option flag for: {}".format(name, ", ".join(repr(v) for v in values)),))
 
                 try:
-                    args[name] = try_parse(name, value, self.options['argtypes'].get(name))
+                    args[name] = try_parse(name, value, self.argspec['argtypes'].get(name))
                 except BadArg as e:
                     return e.action(path)
 
-            for name in self.options['lists']:
+            for name in self.argspec['lists']:
                 args[name] = []
                 if name not in flags:
                     continue
@@ -283,25 +283,25 @@ class wire:
 
                 for value in values:
                     try:
-                        args[name].append(try_parse(name, value, self.options['argtypes'].get(name)))
+                        args[name].append(try_parse(name, value, self.argspec['argtypes'].get(name)))
                     except BadArg as e:
                         return e.action(path)
 
             named_args = False
             if flags:
-                for name in self.options['positional']:
+                for name in self.argspec['positional']:
                     if name in flags:
                         named_args = True
                         break
-                for name in self.options['optional']:
+                for name in self.argspec['optional']:
                     if name in flags:
                         named_args = True
                         break
-                if self.options['tail'] in flags:
+                if self.argspec['tail'] in flags:
                     named_args = True
                         
             if named_args:
-                for name in self.options['positional']:
+                for name in self.argspec['positional']:
                     args[name] = None
                     if name not in flags:
                         return wire.Action("error", path, {'usage':'True'}, errors=("missing named option: {}".format(name),))
@@ -313,11 +313,11 @@ class wire:
                         return wire.Action("error", path, {'usage':True}, errors=("duplicate named option for: {}".format(name, ", ".join(repr(v) for v in values)),))
 
                     try:
-                        args[name] = try_parse(name, value, self.options['argtypes'].get(name))
+                        args[name] = try_parse(name, value, self.argspec['argtypes'].get(name))
                     except BadArg as e:
                         return e.action(path)
 
-                for name in self.options['optional']:
+                for name in self.argspec['optional']:
                     args[name] = None
                     if name not in flags:
                         continue
@@ -329,12 +329,12 @@ class wire:
                         return wire.Action("error", path, {'usage':True}, errors=("duplicate named option for: {}".format(name, ", ".join(repr(v) for v in values)),))
 
                     try:
-                        args[name] = try_parse(value, self.options['argtypes'].get(name))
+                        args[name] = try_parse(value, self.argspec['argtypes'].get(name))
                     except BadArg as e:
                         return e.action(path)
 
 
-                name = self.options['tail']
+                name = self.argspec['tail']
                 if name and name in flags:
                     args[name] = []
 
@@ -344,37 +344,37 @@ class wire:
 
                     for v in values:
                         try:
-                            args[name].append(try_parse(name, value, self.options['argtypes'].get(name)))
+                            args[name].append(try_parse(name, value, self.argspec['argtypes'].get(name)))
                         except BadArg as e:
                             return e.action(path)
 
                 
 
             else:
-                if self.options['positional']:
-                    for name in self.options['positional']:
+                if self.argspec['positional']:
+                    for name in self.argspec['positional']:
                         if not options: 
                             return wire.Action("error", path, {'usage':'True'}, errors=("missing option: {}".format(name),))
 
                         try:
-                            args[name] = try_parse(name, options.pop(0),self.options['argtypes'].get(name))
+                            args[name] = try_parse(name, options.pop(0),self.argspec['argtypes'].get(name))
                         except BadArg as e:
                             return e.action(path)
 
-                if self.options['optional']:
-                    for name in self.options['optional']:
+                if self.argspec['optional']:
+                    for name in self.argspec['optional']:
                         if not options: 
                             args[name] = None
                         else:
                             try:
-                                args[name] = try_parse(name, options.pop(0), self.options['argtypes'].get(name))
+                                args[name] = try_parse(name, options.pop(0), self.argspec['argtypes'].get(name))
                             except BadArg as e:
                                 return e.action(path)
 
-                if self.options['tail']:
+                if self.argspec['tail']:
                     tail = []
-                    name = self.options['tail']
-                    tailtype = self.options['argtypes'].get(name)
+                    name = self.argspec['tail']
+                    tailtype = self.argspec['argtypes'].get(name)
                     while options:
                         try:
                             tail.append(try_parse(name, options.pop(0), tailtype))
@@ -416,9 +416,9 @@ class wire:
                 output.append(self.long)
                 output.append("")
 
-            if self.options and self.options['descriptions']:
+            if self.argspec and self.argspec['descriptions']:
                 output.append('options:')
-                for name, desc in self.options['descriptions'].items():
+                for name, desc in self.argspec['descriptions'].items():
                     output.append('\t{}\t{}'.format(name, desc))
                 output.append('')
 
@@ -433,19 +433,19 @@ class wire:
             args = []
             if self.subcommands:
                 args.append('<command>')
-            if self.options:
-                if self.options['switches']:
-                    args.extend("[--{0}]".format(o) for o in self.options['switches'])
-                if self.options['flags']:
-                    args.extend("[--{0}=<{0}>]".format(o) for o in self.options['flags'])
-                if self.options['lists']:
-                    args.extend("[--{0}=<{0}>...]".format(o) for o in self.options['lists'])
-                if self.options['positional']:
-                    args.extend("<{}>".format(o) for o in self.options['positional'])
-                if self.options['optional']:
-                    args.extend("[<{}>]".format(o) for o in self.options['optional'])
-                if self.options['tail']:
-                    args.append("[<{}>...]".format(self.options['tail']))
+            if self.argspec:
+                if self.argspec['switches']:
+                    args.extend("[--{0}]".format(o) for o in self.argspec['switches'])
+                if self.argspec['flags']:
+                    args.extend("[--{0}=<{0}>]".format(o) for o in self.argspec['flags'])
+                if self.argspec['lists']:
+                    args.extend("[--{0}=<{0}>...]".format(o) for o in self.argspec['lists'])
+                if self.argspec['positional']:
+                    args.extend("<{}>".format(o) for o in self.argspec['positional'])
+                if self.argspec['optional']:
+                    args.extend("[<{}>]".format(o) for o in self.argspec['optional'])
+                if self.argspec['tail']:
+                    args.append("[<{}>...]".format(self.argspec['tail']))
 
             full_name = list(self.prefix)
             full_name.append(self.name)
@@ -460,7 +460,7 @@ class cli:
             self.subcommands = {}
             self.run_fn = None
             self.short = short
-            self.options = None
+            self.argspec = None
             self.nargs = 0
 
         def subcommand(self, name, short):
@@ -488,7 +488,7 @@ class cli:
 
         def run(self, argspec=None):
             if argspec is not None:
-                self.nargs, self.options = parse_argspec(argspec)
+                self.nargs, self.argspec = parse_argspec(argspec)
 
             def decorator(fn):
                 self.run_fn = fn
@@ -498,8 +498,8 @@ class cli:
                     args.pop(0)
                 args = [a for a in args if not a.startswith('_')]
                 
-                if not self.options:
-                    self.nargs, self.options = parse_argspec(" ".join(args))
+                if not self.argspec:
+                    self.nargs, self.argspec = parse_argspec(" ".join(args))
                 else:
                     if self.nargs != len(args):
                         raise Exception('bad option definition')
@@ -515,7 +515,7 @@ class cli:
                 subcommands = {k: v.render() for k,v in self.subcommands.items()},
                 short = self.short,
                 long = long_description,
-                options = self.options, 
+                argspec = self.argspec, 
             )
                 
     #end Command
@@ -529,18 +529,6 @@ class cli:
         if argv and argv[0] == "help":
             argv.pop(0)
             use_help = True
-
-        if argv and ':' in argv[0]:
-            arg = argv.pop(0)
-            idx = arg.find(':',1)
-            args = []
-            while 0 < idx < len(arg) -1:
-                head, arg = arg[:idx], arg[idx:]
-                args.append(head)
-                idx = arg.find(':', idx+1)
-            args.append(arg)
-            args.extend(argv)
-            argv = args
 
         if argv and argv[0] == '--version':
             action = wire.Action("version", [], {})
