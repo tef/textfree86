@@ -121,7 +121,6 @@ def parse_argspec(argspec):
     if args:
         raise Exception('bad argspec')
     
-
     # check names are valid identifiers
 
     return nargs, wire.Argspec(
@@ -454,6 +453,8 @@ class cli:
             self.argspec = None
             self.nargs = 0
 
+        # -- builder methods
+
         def subcommand(self, name, short):
             cmd = cli.Command(name, short)
             cmd.prefix.extend(self.prefix)
@@ -461,23 +462,18 @@ class cli:
             self.subcommands[name] = cmd
             return cmd
 
-        def call(self, path, argv):
-            if path and path[0] == 'help':
-                return self.help(path[1:])
-            elif path and path[0] in self.subcommands:
-                return self.subcommands[path[0]].call(path[1:], argv)
-            elif self.run_fn:
-                if len(argv) == self.nargs:
-                    return self.run_fn(**argv)
-                else:
-                    return wire.Result(-1, "bad options")
-            else:
-                if len(argv) == 0:
-                    return self.render().manual()
-                else:
-                    return wire.Result(-1, self.render.usage())
+        def subgroup(self, group_name, prefix=True):
+            class Group:
+                def subcommand(group, name, short):
+                    if prefix:
+                        name = "{}:{}".format(group_name, name)
+                    cmd = cli.Command(name, short)
+                    cmd.prefix.extend(self.prefix)
+                    cmd.prefix.append(self.name)
+                    self.subcommands[name] = cmd
 
         def run(self, argspec=None):
+            """A decorator for setting the function to be run"""
             if argspec is not None:
                 self.nargs, self.argspec = parse_argspec(argspec)
 
@@ -498,6 +494,8 @@ class cli:
                 return fn
             return decorator
 
+        # -- end of builder methods
+
         def render(self):
             long_description =self.run_fn.__doc__ if self.run_fn else None
             return wire.Command(
@@ -509,6 +507,21 @@ class cli:
                 argspec = self.argspec, 
             )
                 
+        def call(self, path, argv):
+            if path and path[0] == 'help':
+                return self.help(path[1:])
+            elif path and path[0] in self.subcommands:
+                return self.subcommands[path[0]].call(path[1:], argv)
+            elif self.run_fn:
+                try:
+                    return self.run_fn(**argv)
+                else:
+                    return wire.Result(-1, "bad options")
+            else:
+                if len(argv) == 0:
+                    return self.render().manual()
+                else:
+                    return wire.Result(-1, self.render.usage())
     #end Command
 
     def main(root):
