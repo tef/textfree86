@@ -26,9 +26,9 @@ demo2 = root.subcommand('demo', "demo of argspec")
     --value:str     # pass with --value=...
     --bucket:int... # a list of numbers 
     pos1            # positional
-    opt1?           # optional 1
-    opt2?           # optional 2
-    tail...         # tail arg
+    [opt1]           # optional 1
+    [opt2]           # optional 2
+    [tail...]         # tail arg
 ''')
 def run(switch, value, bucket, pos1, opt1, opt2, tail):
     """a demo command that shows all the types of options"""
@@ -44,7 +44,7 @@ def run(switch, value, bucket, pos1, opt1, opt2, tail):
     return "\n".join(output)
 
 demo = demo2.subcommand('demo', "demo of argspec")
-@demo.run('--switch? --value --bucket... pos1 opt1? opt2? tail...')
+@demo.run('--switch? --value --bucket... pos1 [opt1] [opt2] [tail...]')
 def run(switch, value, bucket, pos1, opt1, opt2, tail):
     output = [ 
             "\tswitch:{}".format(switch),

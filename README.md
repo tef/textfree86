@@ -54,12 +54,21 @@ Both of these things require the client to know a little bit more about parsing 
 
 Instead, `textfree86` only needs one URL (and maybe credentials) to run a command.
 
+# Again, Why?
+
+Let's say you've written a deployment script, `deploy.py`. 
+
+- You want other people to use it,
+- ... but you're having trouble getting everyone to use the same copy
+
+Now? You run your deploy script as a service, and everyone uses the same CLI, but remotely.
+
 ## An Example Program
 
 A textfree86 program consists of `cli.Commands()`, chained together, used to decorate functions to dispatch:
 
 ```
-@cmd.run("one two? three...")
+@cmd.run("one [two] [three...]")
 def cmd_run(one, two, three):
     return [one, two, three]
 ```
@@ -102,8 +111,8 @@ The parameter to `run()`, is called an argspec.
 
 An argspec is a string that describes how to turn CLI arguments into a dictionary of name, value pairs. For example:
 
- -"x y z" given "1 2 3" gives {"x":1, "y":2, "z":3}
- -"x..." given "a b c" gives {"x":["a","b","c"]}
+- "x y z" given "1 2 3" gives {"x":1, "y":2, "z":3}
+- "[x...]" given "a b c" gives {"x":["a","b","c"]}
 
 This is used to call the function underneath, so every value in the function must be present in the argspec. When no argspec is provided, `textfree86` defaults to a string of argument names, i.e `foo(x,y,z)` gets `"x y z"`. 
 
@@ -117,11 +126,11 @@ The dictionary passed will contain a value for every name in the argspec. An arg
 
 - `name` describes a positional argument. It must come after any flags and before any optional positional arguments.
 
-- `name?` describes an optional positional argument. If one arg is given for two optional positional args, like `x? y?`, then the values are assigned left to right.
+- `[name]` describes an optional positional argument. If one arg is given for two optional positional args, like `[x] [y]`, then the values are assigned left to right.
 
-- `name...` describes a tail positonal argument. It defaults to `[]`, and all remaining arguments are appended to it.
+- `[name...]` describes a tail positonal argument. It defaults to `[]`, and all remaining arguments are appended to it.
 
-A short argspec has four parts, `<--flags> <positional> <optional positional?> <tail positional...>`
+A short argspec has four parts, `<flags> <positional> [<optional positional>]* [<tail positional>...]`
 
 ### Long Argspec
 
@@ -134,9 +143,9 @@ demo = cli.Command('demo', 'cli example programs')
     --value:str     # pass with --value=...
     --bucket:int... # a list of numbers
     pos1            # positional
-    opt1?           # optional 1
-    opt2?           # optional 2
-    tail...         # tail arg
+    [opt1]          # optional 1
+    [opt2]          # optional 2
+    [tail...]       # tail arg
 ''')
 def run(switch, value, bucket, pos1, opt1, opt2, tail):
     """a demo command that shows all the types of options"""

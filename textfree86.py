@@ -7,9 +7,9 @@ def parse_argspec(argspec):
     """
         argspec is a short description of a command's expected args:
         "x y z"         three args (x,y,z) in that order
-        "x y? z?"       three args, where the second two are optional. 
+        "x [y] [z]"       three args, where the second two are optional. 
                         "arg1 arg2" is x=arg1, y=arg2, z=null
-        "x y z..."      three args (x,y,z) where the final arg can be repeated 
+        "x y [z...]"      three args (x,y,z) where the final arg can be repeated 
                         "arg1 arg2 arg3 arg4" is z = [arg3, arg4]
 
         an argspec comes in the following format, and order
@@ -26,10 +26,10 @@ def parse_argspec(argspec):
                 `cmd --foo=1 --foo=2` foo is [1,2]
             positional is `foo`
                 `cmd x`, foo is `x`
-            optional is `foo?`
+            optional is `[foo]`
                 `cmd` foo is null
                 `cmd x` foo is x 
-            tail is `foo...`
+            tail is `[foo...]` 
                 `cmd` foo is []
                 `cmd 1 2 3` foo is [1,2,3] 
     """
@@ -93,7 +93,7 @@ def parse_argspec(argspec):
         arg, desc = argdesc(args[0])
         if arg.startswith('--'): raise Exception('badarg')
 
-        if arg.endswith(('...', '?')): 
+        if arg.endswith(('...]', ']')) : 
             break
         else:
             args.pop(0)
@@ -103,20 +103,20 @@ def parse_argspec(argspec):
     while args: # optional
         arg, desc = argdesc(args[0])
         if arg.startswith('--'): raise Exception('badarg')
-        if arg.endswith('...'): 
+        if arg.endswith('...]'): 
             break
         else:
             args.pop(0)
-        if not arg.endswith('?'): raise Exception('badarg')
+        if not (arg.startswith('[') and arg.endswith(']')): raise Exception('badarg')
 
-        optional.append(argname(arg[:-1], desc))
+        optional.append(argname(arg[1:-1], desc))
 
     if args: # tail
         arg, desc = argdesc(args.pop(0))
         if arg.startswith('--'): raise Exception('badarg')
-        if arg.endswith('?'): raise Exception('badarg')
-        if not arg.endswith('...'): raise Exception('badarg')
-        tail = argname(arg[:-3], desc)
+        if not arg.startswith('['): raise Exception('badarg')
+        if not arg.endswith('...]'): raise Exception('badarg')
+        tail = argname(arg[1:-4], desc)
 
     if args:
         raise Exception('bad argspec')
@@ -514,7 +514,7 @@ class cli:
             elif path and path[0] in self.subcommands:
                 return self.subcommands[path[0]].call(path[1:], argv)
             elif self.run_fn:
-                try:
+                if len(argv) == self.nargs:
                     return self.run_fn(**argv)
                 else:
                     return wire.Result(-1, "bad options")
