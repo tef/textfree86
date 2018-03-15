@@ -3,10 +3,6 @@ import sys
 import types
 import itertools
 
-class BadArg(Exception):
-    def action(self, path):
-        return wire.Action("error", path, {'usage':True}, errors=self.args)
-
 def try_parse(name, arg, argtype):
     if argtype in ("int","integer"):
         try:
@@ -42,9 +38,6 @@ def try_parse(name, arg, argtype):
     except:
         pass
     return arg
-
-def extract_args(template, argv):
-    return args
 
 def parse_argspec(argspec):
     """
@@ -180,6 +173,10 @@ def parse_argspec(argspec):
 
 
 class wire:
+    class BadArg(Exception):
+        def action(self, path):
+            return wire.Action("error", path, {'usage':True}, errors=self.args)
+
     class Result:
         def __init__(self, exit_code, value):
             self.exit_code = exit_code
@@ -210,7 +207,11 @@ class wire:
             if not self.argspec:
                 # no argspec, print usage
                 if argv and argv[0]:
-                    if self.subcommands:
+                    if argv[0] == "help":
+                        return wire.Action("help", path, {'usage': False})
+                    elif argv[0] == "--help":
+                        return wire.Action("help", path, {'usage': True})
+                    elif self.subcommands:
                         return wire.Action("error", path, {'usage':True}, errors=("unknown command: {}".format(argv[0]),))
                     else:
                         return wire.Action("error", path, {'usage':True}, errors=("unknown option: {}".format(argv[0]),))
@@ -253,7 +254,7 @@ class wire:
                 else:
                     try:
                         args[name] = try_parse(name, values[0], "boolean")
-                    except BadArg as e:
+                    except wire.BadArg as e:
                         return e.action(path)
 
             for name in self.argspec['flags']:
@@ -269,7 +270,7 @@ class wire:
 
                 try:
                     args[name] = try_parse(name, value, self.argspec['argtypes'].get(name))
-                except BadArg as e:
+                except wire.BadArg as e:
                     return e.action(path)
 
             for name in self.argspec['lists']:
@@ -284,7 +285,7 @@ class wire:
                 for value in values:
                     try:
                         args[name].append(try_parse(name, value, self.argspec['argtypes'].get(name)))
-                    except BadArg as e:
+                    except wire.BadArg as e:
                         return e.action(path)
 
             named_args = False
@@ -314,7 +315,7 @@ class wire:
 
                     try:
                         args[name] = try_parse(name, value, self.argspec['argtypes'].get(name))
-                    except BadArg as e:
+                    except wire.BadArg as e:
                         return e.action(path)
 
                 for name in self.argspec['optional']:
@@ -330,7 +331,7 @@ class wire:
 
                     try:
                         args[name] = try_parse(value, self.argspec['argtypes'].get(name))
-                    except BadArg as e:
+                    except wire.BadArg as e:
                         return e.action(path)
 
 
@@ -345,7 +346,7 @@ class wire:
                     for v in values:
                         try:
                             args[name].append(try_parse(name, value, self.argspec['argtypes'].get(name)))
-                        except BadArg as e:
+                        except wire.BadArg as e:
                             return e.action(path)
 
                 
@@ -358,7 +359,7 @@ class wire:
 
                         try:
                             args[name] = try_parse(name, options.pop(0),self.argspec['argtypes'].get(name))
-                        except BadArg as e:
+                        except wire.BadArg as e:
                             return e.action(path)
 
                 if self.argspec['optional']:
@@ -368,7 +369,7 @@ class wire:
                         else:
                             try:
                                 args[name] = try_parse(name, options.pop(0), self.argspec['argtypes'].get(name))
-                            except BadArg as e:
+                            except wire.BadArg as e:
                                 return e.action(path)
 
                 if self.argspec['tail']:
@@ -378,7 +379,7 @@ class wire:
                     while options:
                         try:
                             tail.append(try_parse(name, options.pop(0), tailtype))
-                        except BadArg as e:
+                        except wire.BadArg as e:
                             return e.action(path)
 
                     args[name] = tail
@@ -430,9 +431,10 @@ class wire:
             return "\n".join(output)
 
         def usage(self):
+            output = []
             args = []
-            if self.subcommands:
-                args.append('<command>')
+            full_name = list(self.prefix)
+            full_name.append(self.name)
             if self.argspec:
                 if self.argspec['switches']:
                     args.extend("[--{0}]".format(o) for o in self.argspec['switches'])
@@ -447,9 +449,11 @@ class wire:
                 if self.argspec['tail']:
                     args.append("[<{}>...]".format(self.argspec['tail']))
 
-            full_name = list(self.prefix)
-            full_name.append(self.name)
-            return "usage: {0} {1}".format(" ".join(full_name), " ".join(args))
+                output.append("usage: {0} {1}".format(" ".join(full_name), " ".join(args)))
+            if self.subcommands:
+                output.append("usage: {0} [help] <{1}> [--help]".format(" ".join(full_name), "|".join(self.subcommands)))
+            return "\n".join(output)
+
 
 
 class cli:
@@ -526,12 +530,14 @@ class cli:
 
         obj = root.render()
         use_help = False
-        if argv and argv[0] == "help":
+        if argv and argv[0] in ("help"):
             argv.pop(0)
             use_help = True
 
         if argv and argv[0] == '--version':
             action = wire.Action("version", [], {})
+        elif argv and argv[0] == '--help':
+            action = wire.Action("help", [], {'usage': True})
         else:
             action = obj.parse_args([], argv, environ)
     

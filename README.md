@@ -29,7 +29,7 @@ Hello, world!
 
 The `textfree86` program doesn't need any configuration beyond the URL and any credentials to access the remote CLI.
 
-# Writing a CLI (This works)
+## Writing a CLI (This works)
 
 ```
 from textfree86 import cli
@@ -40,7 +40,7 @@ def cmd_run():
     return 'Hello, World'
 ```
 
-# Parsing Command-Line Options (and this)
+## Parsing Command-Line Options (and this)
 
 `.run()` takes a string describing how to parse the command line argument.
 
@@ -74,7 +74,7 @@ $ florb --one=one --two=two --three=three --three=four
 Of course, `florb help` and `florb --help` work. 
 
 
-## Argspec
+### Argspec
 
 The simplest argspec for `foo(x,y,z)` is `"x y z"`. An argspec describes how to build up a dictionary of arguments, to pass to the function.  The dictionary contains a value for every argument, `None`, `[]`, or `False` if not present.
 
@@ -90,27 +90,27 @@ The simplest argspec for `foo(x,y,z)` is `"x y z"`. An argspec describes how to 
 
 - `x...` describes a tail positonal argument. It defaults to `[]`, and all remaining arguments are appended to it.
 
-## Long Argspec
+### Long Argspec
 
 Passing a multi-line string allows you to pass in short descriptions of the arguments.
 
 ```
 demo = cli.Command('demo', 'cli example programs')
 @demo.run('''
-    --switch?       # a demo switch
-    --value:str     # pass with --value=...
-    --bucket:int... # a list of numbers
-    pos1            # positional
-    opt1?           # optional 1
-    opt2?           # optional 2
-    tail...         # tail arg
+    --switch?       ## a demo switch
+    --value:str     ## pass with --value=...
+    --bucket:int... ## a list of numbers
+    pos1            ## positional
+    opt1?           ## optional 1
+    opt2?           ## optional 2
+    tail...         ## tail arg
 ''')
 def run(switch, value, bucket, pos1, opt1, opt2, tail):
     """a demo command that shows all the types of options"""
     return [switch, value, bucket, pos1, opt1, opt2, tail]
 ```
 
-## Argument Types
+### Argument Types
 
 A field can contain a parsing instruction, `x:string` or `x:int`
 
@@ -126,7 +126,7 @@ An untyped field tries to convert the argument to an integer or floating point n
 This might be a bad idea, but it is up to the client on how best to interpret arguments.  
 
 
-## Subcommands
+### Subcommands
 
 `Command` can be nested, giving a `cmd one <args>` `cmd two <args>` like interface:
 ``` 
@@ -142,18 +142,18 @@ def subcommand_run(...):
 `cmd help one` `cmd one --help`, `cmd help two` `cmd two --help` will print out the manual and usage for `one` and `two` respectively.
 
 
-# Command Completion (Not yet)
+## Command Completion (Not yet)
 
 Using `cmd :complete <command line>` or `cmd :complete` and setting the Bash Completion environment variables will return a list of possible completions.
 
 
-# Network Mode (Not Yet)
+## Network Mode (Not Yet)
 
 With the command/subcommand classes, the CLI framework looks like a Router inside a web framework. Bash completion means being able to expose options without running the command.
 
-The `textfree86` client asks for the completition information, parses the command line arguments, sends them across the network, and prints the responses.
+The `textfree86` client asks for the completition information, parses the command line arguments, sends them across the network, and prints the responses. 
 
-# Stdin/Stdout (Not Yet)
+## Stdin/Stdout (Not Yet)
 
 Using a mixture of websockets and HTTP, the `textfree86` program wraps up any input, streams it to the remote server, and streams back any output.
 
