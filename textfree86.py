@@ -474,6 +474,7 @@ class cli:
 
         def run(self, argspec=None):
             """A decorator for setting the function to be run"""
+
             if argspec is not None:
                 self.nargs, self.argspec = parse_argspec(argspec)
 
@@ -519,7 +520,7 @@ class cli:
                     return wire.Result(-1, "bad options")
             else:
                 if len(argv) == 0:
-                    return self.render().manual()
+                    return wire.Result(0, self.render().manual())
                 else:
                     return wire.Result(-1, self.render.usage())
     #end Command
