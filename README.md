@@ -1,6 +1,6 @@
 # TextFree86: Finally, a network transparent getopt(3)
 
-This readme is semi-fictional.
+This readme is semi-fictional. It is not ready for an audience yet. I'd appreciate if you didn't link to it, thank you.
 
 TextFree86 is a CLI framework that lets you run your command line program across the network.
 
@@ -29,7 +29,7 @@ Hello, world!
 
 The `textfree86` program doesn't need any configuration beyond the URL and any credentials to access the remote CLI.
 
-## Writing a CLI (This works)
+The `florb` command doesn't need much configuration, either:
 
 ```
 from textfree86 import cli
@@ -40,11 +40,26 @@ def cmd_run():
     return 'Hello, World'
 ```
 
-## Parsing Command-Line Options (and this)
+and `florb help` and `florb --help` work too. 
 
-`.run()` takes a string describing how to parse the command line argument.
+## But... Why?
 
-A short argspec has four parts, `<--flags> <positional> <optional positional?> <tail positional...>`
+One friend: "why have protocols when you have to write a new client for each service"
+
+Another: "Oh! This is like docker run, without docker!"
+
+You could implement this as a simpler script: Dump the raw arguments into HTTP, and print the output. This works up until you want tab completion, or passing in files to the command.
+
+Both of these things require the client to know a little bit more about parsing the command line, or be given instructions by the server on how to do it. When the client knows in advance, it has to be updated with every change to the service.
+
+Instead, `textfree86` only needs one URL (and maybe credentials) to run a command.
+
+## An Example Program
+
+A textfree86 program consists of `cli.Commands()`, chained together, used to decorate functions to dispatch:
+
+```
+import textfree86
 
 For example, `one two? three...` describes one positional, one optional, and a tail option:
 
@@ -71,28 +86,36 @@ $ florb --one=one --two=two --three=three --three=four
 ["one", "two", ["three", "four]]
 ```
 
-Of course, `florb help` and `florb --help` work. 
+The parameter to `run()`, is called an argspec.
 
+## Parsing Command Line arguments with an Argspec
 
-### Argspec
+An argspec is a string that describes how to turn CLI arguments into a dictionary of name, value pairs. For example:
 
-The simplest argspec for `foo(x,y,z)` is `"x y z"`. An argspec describes how to build up a dictionary of arguments, to pass to the function.  The dictionary contains a value for every argument, `None`, `[]`, or `False` if not present.
+ -"x y z" given "1 2 3" gives {"x":1, "y":2, "z":3}
+ -"x..." given "a b c" gives {"x":["a","b","c"]}
 
-- `--flag?` describes a switch, which defaults to `False`, but when present, is set to `True`, additionally, `--flag=true` and `--flag=false` both work.
+This is used to call the function underneath, so every value in the function must be present in the argspec. When no argspec is provided, `textfree86` defaults to a string of argument names, i.e `foo(x,y,z)` gets `"x y z"`. 
 
-- `--flag` describes a normal flag, which defaults to `None`, and `--flag=value` sets it.
+The dictionary passed will contain a value for every name in the argspec. An argspec resembles a usage string, albeit with a standard formatting for flags or other command line options:
 
-- `--flag...` describes a list flag, which defaults to `[]`, and each `--flag=value` appends to it
+- `--name?` describes a switch, which defaults to `False`, but when present, is set to `True`, additionally, `--name=true` and `--name=false` both work.
 
-- `x` describes a positional argument. It must come after any flags and before any optional positional arguments.
+- `--name` describes a normal flag, which defaults to `None`, and on the CLI `--name=value` sets it.
 
-- `x?` describes an optional positional argument. If one arg is given for two optional positional args, like `x? y?`, then the values are assigned left to right.
+- `--name...` describes a list flag, which defaults to `[]`, and on the CLI `--name=value` appends to it
 
-- `x...` describes a tail positonal argument. It defaults to `[]`, and all remaining arguments are appended to it.
+- `name` describes a positional argument. It must come after any flags and before any optional positional arguments.
+
+- `name?` describes an optional positional argument. If one arg is given for two optional positional args, like `x? y?`, then the values are assigned left to right.
+
+- `name...` describes a tail positonal argument. It defaults to `[]`, and all remaining arguments are appended to it.
+
+A short argspec has four parts, `<--flags> <positional> <optional positional?> <tail positional...>`
 
 ### Long Argspec
 
-Passing a multi-line string allows you to pass in short descriptions of the arguments.
+Passing a multi-line string allows you to pass in short descriptions of the arguments, using `# ...` at the end of each line.
 
 ```
 demo = cli.Command('demo', 'cli example programs')
@@ -141,23 +164,18 @@ def subcommand_run(...):
 
 `cmd help one` `cmd one --help`, `cmd help two` `cmd two --help` will print out the manual and usage for `one` and `two` respectively.
 
+## Files, Paths, Directories (Not Yet) 
 
-## Command Completion (Not yet)
+Files can also be sent as command line arguments, or written to as output from the program.
 
-Using `cmd :complete <command line>` or `cmd :complete` and setting the Bash Completion environment variables will return a list of possible completions.
+```
+@subcommand.run("data:infile")
+def subcommand_run(data):
+    for line in data.readlines():
+        ...
+```
 
-
-## Network Mode (Not Yet)
-
-With the command/subcommand classes, the CLI framework looks like a Router inside a web framework. Bash completion means being able to expose options without running the command.
-
-The `textfree86` client asks for the completition information, parses the command line arguments, sends them across the network, and prints the responses. 
-
-## Stdin/Stdout (Not Yet)
-
-Using a mixture of websockets and HTTP, the `textfree86` program wraps up any input, streams it to the remote server, and streams back any output.
-
-# Environment Variables, Local Configuration (Not Yet)
+## Environment Variables, Local Configuration (Not Yet)
 
 Instead of positional options or option flags, program configuration can be stored in environment variables, or local files. These can be overridden by option flags too.
 
@@ -165,7 +183,37 @@ A command `cmd subcommand` with environment setting `env`, can read from `CMD_SU
 
 An option should be able to default to using a known file, too.
 
-# Files, Paths, Directories 
+### Stdin/Stdout (Not Yet)
 
-Like streams, Files can also be sent as command line arguments, or written to as output from the program.
+The `textfree86` program wraps up any input, streams it to the remote server, and streams back any output.
+
+## Network Mode (Not Yet)
+
+With the command/subcommand classes, the CLI framework looks like a Router inside a web framework. Bash completion means being able to expose options without running the command.
+
+The `textfree86` client asks for the completition information, parses the command line arguments, sends them across the network, and prints the responses. 
+
+```
+$ textfree86 http://address/ -- help
+```
+
+## Server
+
+## Proxy
+
+## API (Not Yet)
+
+This project evolved from writing a CLI debugger for networked services. As I started writing option parsers inside the client, I realised I'd made a huge mistake. 
+
+Even so, one day:
+
+```
+import textfree86
+
+cmd = cli.RemoteCommand(url)
+
+print(cmd.subcommand.call(name=1, name=2))
+```
+
+If you're after something more like this, you might be curious about the RPC systems that this CLI kit evolved from.
 
