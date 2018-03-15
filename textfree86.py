@@ -124,16 +124,16 @@ def parse_argspec(argspec):
 
     # check names are valid identifiers
 
-    return nargs, {
-            'switches': switches,
-            'flags': flags,
-            'lists': lists,
-            'positional': positional, 
-            'optional': optional , 
-            'tail': tail, 
-            'argtypes': argtypes,
-            'descriptions' : descriptions,
-    }
+    return nargs, wire.Argspec(
+            switches = switches,
+            flags = flags,
+            lists = lists,
+            positional = positional, 
+            optional = optional , 
+            tail = tail, 
+            argtypes = argtypes,
+            descriptions = descriptions,
+    )
 
 
 def parse_args(argspec, argv, environ):
@@ -153,7 +153,7 @@ def parse_args(argspec, argv, environ):
         else:
             options.append(arg)
 
-    for name in argspec['switches']:
+    for name in argspec.switches:
         args[name] = False
         if name not in flags:
             continue
@@ -170,7 +170,7 @@ def parse_args(argspec, argv, environ):
         else:
             args[name] = try_parse(name, values[0], "boolean")
 
-    for name in argspec['flags']:
+    for name in argspec.flags:
         args[name] = None
         if name not in flags:
             continue
@@ -181,9 +181,9 @@ def parse_args(argspec, argv, environ):
         if len(values) > 1:
             raise wire.BadArg("duplicate option flag for: {}".format(name, ", ".join(repr(v) for v in values)))
 
-        args[name] = try_parse(name, value, argspec['argtypes'].get(name))
+        args[name] = try_parse(name, value, argspec.argtypes.get(name))
 
-    for name in argspec['lists']:
+    for name in argspec.lists:
         args[name] = []
         if name not in flags:
             continue
@@ -193,23 +193,23 @@ def parse_args(argspec, argv, environ):
             raise wire.BadArg("missing value for list flag {}".format(name))
 
         for value in values:
-            args[name].append(try_parse(name, value, argspec['argtypes'].get(name)))
+            args[name].append(try_parse(name, value, argspec.argtypes.get(name)))
 
     named_args = False
     if flags:
-        for name in argspec['positional']:
+        for name in argspec.positional:
             if name in flags:
                 named_args = True
                 break
-        for name in argspec['optional']:
+        for name in argspec.optional:
             if name in flags:
                 named_args = True
                 break
-        if argspec['tail'] in flags:
+        if argspec.tail in flags:
             named_args = True
                 
     if named_args:
-        for name in argspec['positional']:
+        for name in argspec.positional:
             args[name] = None
             if name not in flags:
                 raise BadArg("missing named option: {}".format(name))
@@ -220,9 +220,9 @@ def parse_args(argspec, argv, environ):
             if len(values) > 1:
                 raise wire.BadArg("duplicate named option for: {}".format(name, ", ".join(repr(v) for v in values)))
 
-            args[name] = try_parse(name, value, argspec['argtypes'].get(name))
+            args[name] = try_parse(name, value, argspec.argtypes.get(name))
 
-        for name in argspec['optional']:
+        for name in argspec.optional:
             args[name] = None
             if name not in flags:
                 continue
@@ -233,9 +233,9 @@ def parse_args(argspec, argv, environ):
             if len(values) > 1:
                 raise wire.BadArg("duplicate named option for: {}".format(name, ", ".join(repr(v) for v in values)))
 
-            args[name] = try_parse(value, argspec['argtypes'].get(name))
+            args[name] = try_parse(value, argspec.argtypes.get(name))
 
-        name = argspec['tail']
+        name = argspec.tail
         if name and name in flags:
             args[name] = []
 
@@ -244,29 +244,29 @@ def parse_args(argspec, argv, environ):
                 raise wire.BadArg("missing value for named option  {}".format(name))
 
             for v in values:
-                args[name].append(try_parse(name, value, argspec['argtypes'].get(name)))
+                args[name].append(try_parse(name, value, argspec.argtypes.get(name)))
     else:
         if flags:
             raise wire.BadArg("unknown option flags: --{}".format("".join(flags)))
 
-        if argspec['positional']:
-            for name in argspec['positional']:
+        if argspec.positional:
+            for name in argspec.positional:
                 if not options: 
                     raise wire.BadArg("missing option: {}".format(name))
 
-                args[name] = try_parse(name, options.pop(0),argspec['argtypes'].get(name))
+                args[name] = try_parse(name, options.pop(0),argspec.argtypes.get(name))
 
-        if argspec['optional']:
-            for name in argspec['optional']:
+        if argspec.optional:
+            for name in argspec.optional:
                 if not options: 
                     args[name] = None
                 else:
-                    args[name] = try_parse(name, options.pop(0), argspec['argtypes'].get(name))
+                    args[name] = try_parse(name, options.pop(0), argspec.argtypes.get(name))
 
-        if argspec['tail']:
+        if argspec.tail:
             tail = []
-            name = argspec['tail']
-            tailtype = argspec['argtypes'].get(name)
+            name = argspec.tail
+            tailtype = argspec.argtypes.get(name)
             while options:
                 tail.append(try_parse(name, options.pop(0), tailtype))
 
@@ -404,9 +404,9 @@ class wire:
                 output.append(self.long)
                 output.append("")
 
-            if self.argspec and self.argspec['descriptions']:
+            if self.argspec and self.argspec.descriptions:
                 output.append('options:')
-                for name, desc in self.argspec['descriptions'].items():
+                for name, desc in self.argspec.descriptions.items():
                     output.append('\t{}\t{}'.format(name, desc))
                 output.append('')
 
@@ -423,18 +423,18 @@ class wire:
             full_name = list(self.prefix)
             full_name.append(self.name)
             if self.argspec:
-                if self.argspec['switches']:
-                    args.extend("[--{0}]".format(o) for o in self.argspec['switches'])
-                if self.argspec['flags']:
-                    args.extend("[--{0}=<{0}>]".format(o) for o in self.argspec['flags'])
-                if self.argspec['lists']:
-                    args.extend("[--{0}=<{0}>...]".format(o) for o in self.argspec['lists'])
-                if self.argspec['positional']:
-                    args.extend("<{}>".format(o) for o in self.argspec['positional'])
-                if self.argspec['optional']:
-                    args.extend("[<{}>]".format(o) for o in self.argspec['optional'])
-                if self.argspec['tail']:
-                    args.append("[<{}>...]".format(self.argspec['tail']))
+                if self.argspec.switches:
+                    args.extend("[--{0}]".format(o) for o in self.argspec.switches)
+                if self.argspec.flags:
+                    args.extend("[--{0}=<{0}>]".format(o) for o in self.argspec.flags)
+                if self.argspec.lists:
+                    args.extend("[--{0}=<{0}>...]".format(o) for o in self.argspec.lists)
+                if self.argspec.positional:
+                    args.extend("<{}>".format(o) for o in self.argspec.positional)
+                if self.argspec.optional:
+                    args.extend("[<{}>]".format(o) for o in self.argspec.optional)
+                if self.argspec.tail:
+                    args.append("[<{}>...]".format(self.argspec.tail))
 
                 output.append("usage: {0} {1}".format(" ".join(full_name), " ".join(args)))
             if self.subcommands:
