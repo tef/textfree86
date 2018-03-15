@@ -25,7 +25,7 @@ $ remoteflorb
 Hello, world!
 ```
 
-* soon!
+(soon!)
 
 The `textfree86` program doesn't need any configuration beyond the URL and any credentials to access the remote CLI.
 
