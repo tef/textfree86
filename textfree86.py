@@ -3,42 +3,6 @@ import sys
 import types
 import itertools
 
-def try_parse(name, arg, argtype):
-    if argtype in ("int","integer"):
-        try:
-            i = int(arg)
-            if str(i) == arg: return i
-        except:
-            pass
-        raise wire.BadArg('{} expects an integer, got {}'.format(name, arg))
-
-    elif argtype in ("float","num", "number"):
-        try:
-            i = float(arg)
-            if str(i) == arg: return i
-        except:
-            pass
-        raise wire.BadArg('{} expects an floating-point number, got {}'.format(name, arg))
-    elif argtype in ("str", "string"):
-        return arg
-    elif argtype in ("bool", "boolean"):
-        if arg == "true":
-            return True
-        elif arg == "false":
-            return False
-        raise wire.BadArg('{} expects either true or false, got {}'.format(name, arg))
-    try:
-        i = int(arg)
-        if str(i) == arg: return i
-    except:
-        pass
-    try:
-        f = float(arg)
-        if str(f) == arg: return f
-    except:
-        pass
-    return arg
-
 def parse_argspec(argspec):
     """
         argspec is a short description of a command's expected args:
@@ -313,6 +277,42 @@ def parse_args(argspec, path, argv, environ):
     if options:
         raise wire.BadArg("unrecognised option: {!r}".format(" ".join(options)))
     return wire.Action("call", path, args)
+
+def try_parse(name, arg, argtype):
+    if argtype in ("int","integer"):
+        try:
+            i = int(arg)
+            if str(i) == arg: return i
+        except:
+            pass
+        raise wire.BadArg('{} expects an integer, got {}'.format(name, arg))
+
+    elif argtype in ("float","num", "number"):
+        try:
+            i = float(arg)
+            if str(i) == arg: return i
+        except:
+            pass
+        raise wire.BadArg('{} expects an floating-point number, got {}'.format(name, arg))
+    elif argtype in ("str", "string"):
+        return arg
+    elif argtype in ("bool", "boolean"):
+        if arg == "true":
+            return True
+        elif arg == "false":
+            return False
+        raise wire.BadArg('{} expects either true or false, got {}'.format(name, arg))
+    try:
+        i = int(arg)
+        if str(i) == arg: return i
+    except:
+        pass
+    try:
+        f = float(arg)
+        if str(f) == arg: return f
+    except:
+        pass
+    return arg
 
 class wire:
     class BadArg(Exception):
