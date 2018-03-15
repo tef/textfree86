@@ -1,7 +1,19 @@
+import io
 import os
 import sys
 import types
 import itertools
+
+
+ARGTYPES=[x.strip() for x in """
+    bool boolean
+    int integer
+    float num number
+    str string
+    scalar
+    infile outfile
+    stdin stdout stderr
+""".split() if x]
 
 def parse_argspec(argspec):
     """
@@ -63,6 +75,8 @@ def parse_argspec(argspec):
             return arg
         if ':' in arg:
             name, atype = arg.split(':')
+            if atype not in ARGTYPES:
+                raise wire.BadArg("option {} has unrecognized type {}".format(name, atype))
             argtypes[name] = atype 
         else:
             name = arg
@@ -93,30 +107,36 @@ def parse_argspec(argspec):
         arg, desc = argdesc(args[0])
         if arg.startswith('--'): raise Exception('badarg')
 
-        if arg.endswith(('...]', ']')) : 
+        if arg.endswith(('...]', ']', '...')) : 
             break
         else:
             args.pop(0)
 
         positional.append(argname(arg, desc))
 
-    while args: # optional
-        arg, desc = argdesc(args[0])
-        if arg.startswith('--'): raise Exception('badarg')
-        if arg.endswith('...]'): 
-            break
-        else:
-            args.pop(0)
-        if not (arg.startswith('[') and arg.endswith(']')): raise Exception('badarg')
-
-        optional.append(argname(arg[1:-1], desc))
-
-    if args: # tail
+    if args and args[0].endswith('...'):
         arg, desc = argdesc(args.pop(0))
         if arg.startswith('--'): raise Exception('badarg')
-        if not arg.startswith('['): raise Exception('badarg')
-        if not arg.endswith('...]'): raise Exception('badarg')
-        tail = argname(arg[1:-4], desc)
+        if arg.startswith('['): raise Exception('badarg')
+        tail = argname(arg[:-3], desc)
+    elif args:
+        while args: # optional
+            arg, desc = argdesc(args[0])
+            if arg.startswith('--'): raise Exception('badarg')
+            if arg.endswith('...]'): 
+                break
+            else:
+                args.pop(0)
+            if not (arg.startswith('[') and arg.endswith(']')): raise Exception('badarg')
+
+            optional.append(argname(arg[1:-1], desc))
+
+        if args: # tail
+            arg, desc = argdesc(args.pop(0))
+            if arg.startswith('--'): raise Exception('badarg')
+            if not arg.startswith('['): raise Exception('badarg')
+            if not arg.endswith('...]'): raise Exception('badarg')
+            tail = argname(arg[1:-4], desc)
 
     if args:
         raise Exception('bad argspec')
@@ -278,7 +298,16 @@ def parse_args(argspec, argv, environ):
     return args
 
 def try_parse(name, arg, argtype):
-    if argtype in ("int","integer"):
+    if argtype in ("str", "string"):
+        return arg
+    elif argtype == "infile":
+        buf = io.BytesIO()
+        with open(arg, "rb") as fh:
+            buf.write(fh.read())
+        buf.seek(0)
+        return buf
+
+    elif argtype in ("int","integer"):
         try:
             i = int(arg)
             if str(i) == arg: return i
@@ -293,8 +322,6 @@ def try_parse(name, arg, argtype):
         except:
             pass
         raise wire.BadArg('{} expects an floating-point number, got {}'.format(name, arg))
-    elif argtype in ("str", "string"):
-        return arg
     elif argtype in ("bool", "boolean"):
         if arg == "true":
             return True
@@ -462,16 +489,6 @@ class cli:
             cmd.prefix.append(self.name)
             self.subcommands[name] = cmd
             return cmd
-
-        def subgroup(self, group_name, prefix=True):
-            class Group:
-                def subcommand(group, name, short=None, long=None):
-                    if prefix:
-                        name = "{}:{}".format(group_name, name)
-                    cmd = cli.Command(name, short=short, long=long)
-                    cmd.prefix.extend(self.prefix)
-                    cmd.prefix.append(self.name)
-                    self.subcommands[name] = cmd
 
         def run(self, argspec=None):
             """A decorator for setting the function to be run"""

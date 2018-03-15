@@ -13,7 +13,7 @@ def add_cmd(a, b):
     return a+b
 
 echo = root.subcommand('echo', "echo")
-@echo.run("--reverse? line:str...")
+@echo.run("--reverse? [line:str...]")
 def echocmd(line, reverse):
     """echo all arguments"""
     if reverse:

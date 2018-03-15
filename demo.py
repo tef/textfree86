@@ -24,14 +24,10 @@ def run(switch, value, bucket, pos1, opt1, opt2, tail):
     ]
     return "\n".join(output)
 
-one = demo.subcommand(':one','nothing')
-@one.run()
-def one_run():
-    return ":one"
+one = demo.subcommand('cat','print a file')
+@one.run("file:infile")
+def one_run(file):
+    return file.read()
 
-one = demo.subcommand('one','nothing')
-@one.run()
-def one_run():
-    return "one"
 if __name__ == '__main__':
     cli.main(demo)
