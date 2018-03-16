@@ -191,6 +191,14 @@ An option should be able to default to using a known file, too.
 
 The `textfree86` program wraps up any input, streams it to the remote server, and streams back any output.
 
+### Bash Completion (Sort-of)
+
+```
+complete -o nospace,default -c <command> <command>
+```
+
+Currently only option flag names are completed
+
 ## Network Mode (Not Yet)
 
 With the command/subcommand classes, the CLI framework looks like a Router inside a web framework. Bash completion means being able to expose options without running the command.
@@ -205,6 +213,8 @@ $ textfree86 http://address/ -- help
 
 ### Proxy
 
+### Offline Client
+
 ### API (Not Yet)
 
 This project evolved from writing a CLI debugger for networked services. As I started writing option parsers inside the client, I realised I'd made a huge mistake. 
@@ -216,7 +226,7 @@ import textfree86
 
 cmd = cli.RemoteCommand(url)
 
-print(cmd.subcommand.call(name=1, name=2))
+print(cmd.subcommand(name=1, name=2))
 ```
 
 If you're after something more like this, you might be curious about the RPC systems that this CLI kit evolved from.

@@ -25,9 +25,9 @@ def run(switch, value, bucket, pos1, opt1, opt2, tail):
     return "\n".join(output)
 
 one = demo.subcommand('cat','print a file')
-@one.run("file:infile")
-def one_run(file):
-    return file.read()
+@one.run("files:infile...")
+def one_run(files):
+    return b"".join(file.read() for file in files)
 
 two = demo.subcommand('write', 'write a file')
 @two.run("file:outfile")

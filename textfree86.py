@@ -584,19 +584,39 @@ class cli:
         def invoke(self, argv):
             args = {}
             file_handles = {}
-            for name, value in argv.items():
-                if isinstance(value, wire.FileHandle):
-                    if value.mode == "read":
-                        buf = io.BytesIO()
-                        buf.write(value.buf)
-                        buf.seek(0)
-                        args[name] = buf
-                    elif value.mode == "write":
-                        buf = io.BytesIO()
-                        args[name] = buf
-                        file_handles[name] = [buf]
+            for name, values in argv.items():
+                if isinstance(values, list):
+                    out = []
+                    for value in values:
+                        if isinstance(value, wire.FileHandle):
+                            if value.mode == "read":
+                                buf = io.BytesIO()
+                                buf.write(value.buf)
+                                buf.seek(0)
+                                out.append(buf)
+                            elif value.mode == "write":
+                                buf = io.BytesIO()
+                                out.append(buf)
+                                if name not in file_handles: file_handles[name] = []
+                                file_handles[name].append(buf)
+                        else:
+                            out.append(value)
+                    args[name] = out
+                
                 else:
-                    args[name] = value
+                    value = values
+                    if isinstance(values, wire.FileHandle):
+                        if value.mode == "read":
+                            buf = io.BytesIO()
+                            buf.write(value.buf)
+                            buf.seek(0)
+                            args[name] = buf
+                        elif value.mode == "write":
+                            buf = io.BytesIO()
+                            args[name] = buf
+                            file_handles[name] = [buf]
+                    else:
+                        args[name] = value
 
             result = self.run_fn(**args)
 
@@ -610,6 +630,9 @@ class cli:
                     output_fhs[name].append(fh.getvalue())
 
             return wire.Result(0, result, file_handles=output_fhs)
+
+        def __call__(self, **kwargs):
+            return self.run_fn(**args)
 
     #end Command
 
@@ -646,20 +669,39 @@ class cli:
         elif action.mode == "call":
             file_handles = {}
             argv = {}
-            for name, value in action.argv.items():
-                if isinstance(value, wire.FileHandle):
-                    if value.mode == "read":
-                        with open(value.name, "rb") as fh:
-                            buf = fh.read()
-                        argv[name] = wire.FileHandle(value.name, "read", buf=buf)
-                    elif value.mode == "write":
-                        fh = open(value.name, "xb")
-                        if name not in file_handles:
-                            file_handles[name] = []
-                        file_handles[name].append(fh)
-                        argv[name] = value
+            for name, values in action.argv.items():
+                if isinstance(values, list):
+                    out = []
+                    for value in values:
+                        if isinstance(value, wire.FileHandle):
+                            if value.mode == "read":
+                                with open(value.name, "rb") as fh:
+                                    buf = fh.read()
+                                out.append(wire.FileHandle(value.name, "read", buf=buf))
+                            elif value.mode == "write":
+                                fh = open(value.name, "xb")
+                                if name not in file_handles:
+                                    file_handles[name] = []
+                                file_handles[name].append(fh)
+                                out.append(value)
+                        else:
+                            out.append(value)
+                    argv[name] = out
                 else:
-                    argv[name] = value
+                    value = values
+                    if isinstance(value, wire.FileHandle):
+                        if value.mode == "read":
+                            with open(value.name, "rb") as fh:
+                                buf = fh.read()
+                            argv[name] = wire.FileHandle(value.name, "read", buf=buf)
+                        elif value.mode == "write":
+                            fh = open(value.name, "xb")
+                            if name not in file_handles:
+                                file_handles[name] = []
+                            file_handles[name].append(fh)
+                            argv[name] = value
+                    else:
+                        argv[name] = value
 
             result = root.call(action.path, argv)
 
