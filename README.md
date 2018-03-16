@@ -168,15 +168,15 @@ An untyped field tries to convert the argument to an integer or floating point n
 This might be a bad idea, but it is up to the client on how best to interpret arguments.  
 
 
-### Files, Paths, Directories (Not Yet) 
+### Files, Paths, Directories (Sort of) 
 
 Files can also be sent as command line arguments, or written to as output from the program.
 
 ```
-@subcommand.run("data:infile")
-def subcommand_run(data):
+@subcommand.run("data:infile output:outfile")
+def subcommand_run(data, output):
     for line in data.readlines():
-        ...
+        output.write(line)
 ```
 
 ### Environment Variables, Local Configuration (Not Yet)

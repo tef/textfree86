@@ -29,5 +29,10 @@ one = demo.subcommand('cat','print a file')
 def one_run(file):
     return file.read()
 
+two = demo.subcommand('write', 'write a file')
+@two.run("file:outfile")
+def two_run(file):
+    file.write(b"Test\n\n\n")
+
 if __name__ == '__main__':
     cli.main(demo)
