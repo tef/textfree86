@@ -391,6 +391,14 @@ class wire:
         def complete(self, path, text):
             if path and path[0] in self.subcommands:
                 return self.subcommands[path[0]].complete(path[1:], text)
+            elif not path:
+                output = []
+                for name in self.subcommands:
+                    if name.startswith(text):
+                        output.append(name)
+                if output:
+                    return output
+
             if text.startswith('--'):
                 return self.complete_flag(text[2:])
             elif text.startswith('-'):
