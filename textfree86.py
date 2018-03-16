@@ -342,17 +342,186 @@ def try_parse(name, arg, argtype):
     else:
         raise wire.BadArg("Don't know how to parse option {}, of unknown type {}".format(name, argtype))
 
+class codec:
+    """
+        just enough of a type-length-value scheme to be dangerous
+        data model: json with ordered dictionaries, bytestrings, and tagged objects
+
+        true = "y"
+        false = "n"
+        null = "z"
+        int = "i" <integer as ascii string> \x7F
+        float = "f" <c99-hex float as ascii string> \x7F
+        bytes = "b" <number bytes as ascii string> \x7F <bytes> \x7F
+        list = "L" <number of entries as ascii string> \x7F (<encoded value>)* \7F
+        record = "R" <number of pairs as ascii string> \x7F (<encoded key> <encoded value>)* \7F
+        record = "T" <name as printable ascii string> \x7F <encoded value> \7F
+
+        note: 0..31 and 128..255 are not used as types for a reason
+        
+        stretch goals:
+            use utf-8 codepoint as type, as high bit is reserved
+            encode ints 0..31 as types \x00 .. \x1f
+            types for pos int, neg int, float that use <width as codepoint> <bytes>
+                i.e "+\x01\x20 for 32, "-\x01\x7F" as -127
+            types to define numbers for tag/field names in records, 
+
+    """
+    tags = {}
+    classes = {}
+    TRUE = ord("y")
+    FALSE = ord("n")
+    NULL = ord("z")
+    INT = ord("i")
+    FLOAT = ord("f")
+    STRING = ord("u")
+    BYTES = ord("b")
+    LIST = ord("L")
+    RECORD = ord("R")
+    TAG = ord("T")
+    END = 127
+
+    def parse(buf, offset=0):
+        peek = buf[offset]
+        if peek == codec.TRUE:
+            return True, offset+1
+        elif peek == codec.FALSE:
+            return False, offset+1
+        elif peek == codec.NULL:
+            return None, offset+1
+        elif peek == codec.INT:
+            end = buf.index(codec.END, offset+1)
+            obj = buf[offset+1:end].decode('ascii')
+            return int(obj), end+1
+        elif peek == codec.FLOAT:
+            end = buf.index(codec.END, offset+1)
+            obj = buf[offset+1:end].decode('ascii')
+            return float.fromhex(obj), end+1
+        elif peek == codec.BYTES:
+            end = buf.index(codec.END, offset+1)
+            size = int(buf[offset+1:end].decode('ascii'))
+            start, end = end+1, end+1+size
+            obj = buf[start:end]
+            end = buf.index(codec.END, end)
+            return obj, end+1
+        elif peek == codec.STRING:
+            end = buf.index(codec.END, offset+1)
+            size = int(buf[offset+1:end].decode('ascii'))
+            start, end = end+1, end+1+size
+            obj = buf[start:end].decode('utf-8')
+            end = buf.index(codec.END, end)
+            return obj, end+1
+        elif peek == codec.LIST:
+            end = buf.index(codec.END, offset+1)
+            size = int(buf[offset+1:end].decode('ascii'))
+            start = end+1
+            out = []
+            for _ in range(size):
+                value, start = codec.parse(buf, start)
+                out.append(value)
+            end = buf.index(codec.END, start)
+            return out, end+1
+        elif peek == codec.RECORD:
+            end = buf.index(codec.END, offset+1)
+            size = int(buf[offset+1:end].decode('ascii'))
+            start = end+1
+            out = {}
+            for _ in range(size):
+                key, start = codec.parse(buf, start)
+                value, start = codec.parse(buf, start)
+                out[key] = value
+
+            end = buf.index(codec.END, start)
+            return out, end+1
+        elif peek == codec.TAG:
+            end = buf.index(codec.END, offset+1)
+            tag = (buf[offset+1:end].decode('ascii'))
+            cls = codec.classes[tag]
+            args, start = codec.parse(buf, end+1)
+            out = cls(**args)
+            end = buf.index(codec.END, start)
+            return out, end+1
+
+
+        raise Exception('bad buf {}'.format(peek.encode('ascii')))
+
+
+    def dump(obj, buf):
+        if obj is True:
+            buf.append(codec.TRUE)
+        elif obj is False:
+            buf.append(codec.FALSE)
+        elif obj is None:
+            buf.append(codec.NULL)
+        elif isinstance(obj, int):
+            buf.append(codec.INT)
+            buf.extend(str(obj).encode('ascii'))
+            buf.append(codec.END)
+        elif isinstance(obj, float):
+            buf.append(codec.INT)
+            buf.extend(float.hex(obj).encode('ascii'))
+            buf.append(codec.END)
+        elif isinstance(obj, (bytes,bytearray)):
+            buf.append(codec.BYTES)
+            buf.extend(str(len(obj)).encode('ascii'))
+            buf.append(codec.END)
+            buf.extend(obj)
+            buf.append(codec.END)
+        elif isinstance(obj, (str)):
+            obj = obj.encode('utf-8')
+            buf.append(codec.STRING)
+            buf.extend(str(len(obj)).encode('ascii'))
+            buf.append(codec.END)
+            buf.extend(obj)
+            buf.append(codec.END)
+        elif isinstance(obj, (list, tuple)):
+            buf.append(codec.LIST)
+            buf.extend(str(len(obj)).encode('ascii'))
+            buf.append(codec.END)
+            for x in obj:
+                codec.dump(x, buf)
+            buf.append(codec.END)
+        elif isinstance(obj, (dict)):
+            buf.append(codec.RECORD)
+            buf.extend(str(len(obj)).encode('ascii'))
+            buf.append(codec.END)
+            for k,v in obj.items():
+                codec.dump(k, buf)
+                codec.dump(v, buf)
+            buf.append(codec.END)
+        elif obj.__class__ in codec.tags:
+            tag = codec.tags[obj.__class__].encode('ascii')
+            buf.append(codec.TAG)
+            buf.extend(tag)
+            buf.append(codec.END)
+            codec.dump(obj.__dict__, buf)
+            buf.append(codec.END)
+        else:
+            raise Exception('bad obj {!r}'.format(obj))
+        return buf
+
+    def register():
+        def decorator(cls):
+            name = cls.__name__
+            codec.classes[name] = cls
+            codec.tags[cls] = name
+            return cls
+        return decorator
+
 class wire:
+    @codec.register()
     class BadArg(Exception):
         def action(self, path):
             return wire.Action("error", path, {'usage':True}, errors=self.args)
 
+    @codec.register()
     class FileHandle:
         def __init__(self, name, mode, buf=None):
             self.name = name
             self.mode = mode
             self.buf = buf
 
+    @codec.register()
     class Argspec:
         def __init__(self, switches, flags, lists, positional, optional, tail, argtypes, descriptions):
             self.switches = switches
@@ -364,12 +533,14 @@ class wire:
             self.argtypes = argtypes
             self.descriptions = descriptions
 
+    @codec.register()
     class Result:
         def __init__(self, exit_code, value, file_handles=()):
             self.exit_code = exit_code
             self.value = value
             self.file_handles = file_handles
             
+    @codec.register()
     class Action:
         def __init__(self, mode, command, argv, errors=()):
             self.mode = mode
@@ -377,6 +548,7 @@ class wire:
             self.argv = argv
             self.errors = errors
 
+    @codec.register()
     class Command:
         def __init__(self, prefix, name, subcommands, short, long, argspec):
             self.prefix = prefix
@@ -511,6 +683,35 @@ class wire:
 
 
 class cli:
+    class LocalService:
+        def __init__(self, root):
+            self.root = root
+    
+        def render(self):
+            return codec.dump(self.root.render(), bytearray())
+
+        def call(self, pathbuf, argvbuf):
+            path, _ = codec.parse(pathbuf, 0)
+            argv, _ = codec.parse(argvbuf, 0)
+            result =  self.root.call(path, argv)
+            return codec.dump(result, bytearray())
+
+    class LocalClient:
+        def __init__(self, service):
+            self.service = service
+
+        def render(self):
+            buf = self.service.render()
+            obj, _ = codec.parse(buf, 0)
+            return obj
+
+        def call(self, path, argv):
+            path = codec.dump(path, bytearray())
+            argv = codec.dump(argv, bytearray())
+            outbuf = self.service.call(path, argv)
+            result, _ = codec.parse(outbuf,0)
+            return result
+
     class Command:
         def __init__(self, name, short=None, long=None):
             self.name = name
@@ -565,6 +766,8 @@ class cli:
                 argspec = self.argspec, 
             )
                 
+
+
         def call(self, path, argv):
             if path and path[0] == 'help':
                 return self.help(path[1:])
@@ -640,6 +843,8 @@ class cli:
         argv = sys.argv[1:]
         environ = os.environ
 
+        root = cli.LocalClient(cli.LocalService(root))
+
         obj = root.render()
 
         if 'COMP_LINE' in environ and 'COMP_POINT' in environ:
@@ -703,7 +908,7 @@ class cli:
                     else:
                         argv[name] = value
 
-            result = root.call(action.path, argv)
+            result =  root.call(action.path, argv)
 
             if file_handles and isinstance(result, wire.Result) and result.file_handles:
                 for name, fhs in file_handles.items():
@@ -730,7 +935,7 @@ class cli:
             exit_code = -len(action.errors)
 
         if result is not None:
-            if isinstance(result, bytes):
+            if isinstance(result, (bytes, bytearray)):
                 sys.stdout.buffer.write(result)
             elif isinstance(result, str):
                 sys.stdout.write(result)
