@@ -188,7 +188,7 @@ def parse_args(argspec, argv, environ):
         if values[0] is None:
             args[name] = True
         else:
-            args[name] = try_parse(name, values[0], "boolean", file_handles)
+            args[name] = try_parse(name, values[0], "boolean")
 
     for name in argspec.flags:
         args[name] = None
@@ -201,7 +201,7 @@ def parse_args(argspec, argv, environ):
         if len(values) > 1:
             raise wire.BadArg("duplicate option flag for: {}".format(name, ", ".join(repr(v) for v in values)))
 
-        args[name] = try_parse(name, value, argspec.argtypes.get(name), file_handles)
+        args[name] = try_parse(name, value, argspec.argtypes.get(name))
 
     for name in argspec.lists:
         args[name] = []
@@ -213,7 +213,7 @@ def parse_args(argspec, argv, environ):
             raise wire.BadArg("missing value for list flag {}".format(name))
 
         for value in values:
-            args[name].append(try_parse(name, value, argspec.argtypes.get(name), file_handles))
+            args[name].append(try_parse(name, value, argspec.argtypes.get(name)))
 
     named_args = False
     if flags:
@@ -240,7 +240,7 @@ def parse_args(argspec, argv, environ):
             if len(values) > 1:
                 raise wire.BadArg("duplicate named option for: {}".format(name, ", ".join(repr(v) for v in values)))
 
-            args[name] = try_parse(name, value, argspec.argtypes.get(name), file_handles)
+            args[name] = try_parse(name, value, argspec.argtypes.get(name))
 
         for name in argspec.optional:
             args[name] = None
@@ -253,7 +253,7 @@ def parse_args(argspec, argv, environ):
             if len(values) > 1:
                 raise wire.BadArg("duplicate named option for: {}".format(name, ", ".join(repr(v) for v in values)))
 
-            args[name] = try_parse(value, argspec.argtypes.get(name), file_handles)
+            args[name] = try_parse(value, argspec.argtypes.get(name))
 
         name = argspec.tail
         if name and name in flags:
@@ -264,7 +264,7 @@ def parse_args(argspec, argv, environ):
                 raise wire.BadArg("missing value for named option  {}".format(name))
 
             for v in values:
-                args[name].append(try_parse(name, value, argspec.argtypes.get(name), file_handles))
+                args[name].append(try_parse(name, value, argspec.argtypes.get(name)))
     else:
         if flags:
             raise wire.BadArg("unknown option flags: --{}".format("".join(flags)))
@@ -274,21 +274,21 @@ def parse_args(argspec, argv, environ):
                 if not options: 
                     raise wire.BadArg("missing option: {}".format(name))
 
-                args[name] = try_parse(name, options.pop(0),argspec.argtypes.get(name), file_handles)
+                args[name] = try_parse(name, options.pop(0),argspec.argtypes.get(name))
 
         if argspec.optional:
             for name in argspec.optional:
                 if not options: 
                     args[name] = None
                 else:
-                    args[name] = try_parse(name, options.pop(0), argspec.argtypes.get(name), file_handles)
+                    args[name] = try_parse(name, options.pop(0), argspec.argtypes.get(name))
 
         if argspec.tail:
             tail = []
             name = argspec.tail
             tailtype = argspec.argtypes.get(name)
             while options:
-                tail.append(try_parse(name, options.pop(0), tailtype, file_handles))
+                tail.append(try_parse(name, options.pop(0), tailtype))
 
             args[name] = tail
 
@@ -296,22 +296,16 @@ def parse_args(argspec, argv, environ):
         raise wire.BadArg("unnamed options given {!r}".format(" ".join(options)))
     if options:
         raise wire.BadArg("unrecognised option: {!r}".format(" ".join(options)))
-    return args, file_handles
+    return args
 
-def try_parse(name, arg, argtype, file_handles):
+def try_parse(name, arg, argtype):
     if argtype in ("str", "string"):
         return arg
     elif argtype == "infile":
-        with open(arg, "rb") as fh:
-            buf = fh.read()
-        return wire.FileHandle(arg, "read", buf)
+        return wire.FileHandle(arg, "read")
     elif argtype == "outfile":
-        fh = open(arg, "xb")
-        if name not in file_handles:
-            file_handles[name] = []
-        file_handles[name].append(fh)
-
         return wire.FileHandle(arg, "write")
+
     elif argtype in ("int","integer"):
         try:
             i = int(arg)
@@ -354,8 +348,8 @@ class wire:
             return wire.Action("error", path, {'usage':True}, errors=self.args)
 
     class FileHandle:
-        def __init__(self, idx, mode, buf=None):
-            self.idx = idx
+        def __init__(self, name, mode, buf=None):
+            self.name = name
             self.mode = mode
             self.buf = buf
 
@@ -377,12 +371,11 @@ class wire:
             self.file_handles = file_handles
             
     class Action:
-        def __init__(self, mode, command, argv, errors=(), file_handles=()):
+        def __init__(self, mode, command, argv, errors=()):
             self.mode = mode
             self.path = command
             self.argv = argv
             self.errors = errors
-            self.file_handles = file_handles
 
     class Command:
         def __init__(self, prefix, name, subcommands, short, long, argspec):
@@ -441,8 +434,8 @@ class wire:
                 if '--help' in argv:
                     return wire.Action("help", path, {'usage':True})
                 try:
-                    args, file_handles = parse_args(self.argspec, argv, environ)
-                    return wire.Action("call", path, args, file_handles=file_handles)
+                    args = parse_args(self.argspec, argv, environ)
+                    return wire.Action("call", path, args)
                 except wire.BadArg as e:
                     return e.action(path)
 
@@ -571,12 +564,8 @@ class cli:
                 return self.subcommands[path[0]].call(path[1:], argv)
             elif self.run_fn:
                 if len(argv) == self.nargs:
-                    argv, file_handles = self.make_file_handles(argv)
-                    result = self.run_fn(**argv)
-                    if isinstance(result, types.GeneratorType):
-                        result = list(result)
-                    file_handles = self.process_file_handles(file_handles)
-                    return wire.Result(0, result, file_handles=file_handles)
+                    return self.invoke(argv)
+
                 else:
                     return wire.Result(-1, "bad options")
             else:
@@ -584,6 +573,14 @@ class cli:
                     return wire.Result(0, self.render().manual())
                 else:
                     return wire.Result(-1, self.render.usage())
+
+        def invoke(self, argv):
+            argv, file_handles = self.make_file_handles(argv)
+            result = self.run_fn(**argv)
+            if isinstance(result, types.GeneratorType):
+                result = list(result)
+            file_handles = self.process_file_handles(file_handles)
+            return wire.Result(0, result, file_handles=file_handles)
 
         def make_file_handles(self, argv):
             args = {}
@@ -643,7 +640,35 @@ class cli:
                 print(line)
             sys.exit(0)
         elif action.mode == "call":
-            result = root.call(action.path, action.argv)
+            file_handles = {}
+            argv = {}
+            for name, value in action.argv.items():
+                if isinstance(value, wire.FileHandle):
+                    if value.mode == "read":
+                        with open(value.name, "rb") as fh:
+                            buf = fh.read()
+                        argv[name] = wire.FileHandle(value.name, "read", buf=buf)
+                    elif value.mode == "write":
+                        fh = open(value.name, "xb")
+                        if name not in file_handles:
+                            file_handles[name] = []
+                        file_handles[name].append(fh)
+                        argv[name] = value
+                else:
+                    argv[name] = value
+
+            result = root.call(action.path, argv)
+
+            if file_handles and isinstance(result, wire.Result) and result.file_handles:
+                for name, fhs in file_handles.items():
+                    for idx, fh in enumerate(fhs):
+                        fh.write(result.file_handles[name][idx])
+                        fh.close()
+            elif file_handles:
+                for name, fhs in file_handles.items():
+                    for fh in fhs:
+                        fh.close()
+
         elif action.mode == "version":
             result = obj.version()
         elif action.mode == "help":
@@ -654,22 +679,17 @@ class cli:
 
         if isinstance(result, wire.Result):
             exit_code = result.exit_code
-            if action.file_handles and result.file_handles:
-                for name, fhs in action.file_handles.items():
-                    for idx, fh in enumerate(fhs):
-                        fh.write(result.file_handles[name][idx])
-                        fh.close()
-            elif action.file_handles:
-                for name, fhs in action.file_handles.items():
-                    for fh in fhs:
-                        fh.close()
-
             result = result.value
         else:
             exit_code = -len(action.errors)
 
         if result is not None:
-            print(result)
+            if isinstance(result, bytes):
+                sys.stdout.buffer.write(result)
+            elif isinstance(result, str):
+                sys.stdout.write(result)
+            else:
+                print(result)
 
         sys.exit(exit_code)
 
