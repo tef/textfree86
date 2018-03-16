@@ -394,6 +394,32 @@ class wire:
 
         def version(self):
             return "<None>"
+
+        def complete(self, path, text):
+            if path and path[0] in self.subcommands:
+                return self.subcommands[path[0]].complete(path[1:], text)
+            if text.startswith('--'):
+                return self.complete_flag(text[2:])
+            elif text.startswith('-'):
+                return self.complete_flag(text[1:])
+            else:
+                # work out which positional, optional, or tail arg it is
+                # suggest type
+                return ()
+
+        def complete_flag(self, prefix):
+            if '=' in prefix:
+                # check to see if it's a completeable type
+                return ()
+            else:
+                out = []
+                out.extend("--{}".format(x) for x in self.argspec.switches if x.startswith(prefix))
+                out.extend("--{}=".format(x) for x in self.argspec.flags if x.startswith(prefix))
+                out.extend("--{}=".format(x) for x in self.argspec.lists if x.startswith(prefix))
+                return out
+                
+            
+
         def parse_args(self, path,argv, environ):
             if argv and argv[0] in self.subcommands:
                 return self.subcommands[argv[0]].parse_args(path+[argv[0]], argv[1:], environ)
@@ -592,7 +618,14 @@ class cli:
 
         obj = root.render()
 
-        if argv and argv[0] in ("help"):
+        if 'COMP_LINE' in environ and 'COMP_POINT' in environ:
+            arg, offset =  os.environ['COMP_LINE'], int(os.environ['COMP_POINT'])
+            tmp = arg[:offset].rsplit(' ', 1)
+            if len(tmp) > 1:
+                action = wire.Action('complete', tmp[0].split(' ')[1:], tmp[1])
+            else:
+                action = wire.Action('complete', [], tmp[0])
+        elif argv and argv[0] in ("help"):
             argv.pop(0)
             use_help = True
             action = obj.parse_args([], argv, environ)
@@ -604,15 +637,20 @@ class cli:
         else:
             action = obj.parse_args([], argv, environ)
     
-        if action.mode == "help":
-            result = obj.help(action.path, usage=action.argv.get('usage'))
-        elif action.mode == "error":
-            print("error: {}".format(", ".join(action.errors)))
-            result = obj.help(action.path, usage=action.argv.get('usage'))
+        if action.mode == "complete":
+            result = obj.complete(action.path, action.argv)
+            for line in result:
+                print(line)
+            sys.exit(0)
         elif action.mode == "call":
             result = root.call(action.path, action.argv)
         elif action.mode == "version":
             result = obj.version()
+        elif action.mode == "help":
+            result = obj.help(action.path, usage=action.argv.get('usage'))
+        elif action.mode == "error":
+            print("error: {}".format(", ".join(action.errors)))
+            result = obj.help(action.path, usage=action.argv.get('usage'))
 
         if isinstance(result, wire.Result):
             exit_code = result.exit_code
