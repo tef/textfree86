@@ -54,7 +54,7 @@ Both of these things require the client to know a little bit more about parsing 
 
 Instead, `textfree86` only needs one URL (and maybe credentials) to run a command.
 
-# Again, Why?
+## Again, Why?
 
 Let's say you've written a deployment script, `deploy.py`. 
 
