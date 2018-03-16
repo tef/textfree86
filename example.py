@@ -56,8 +56,8 @@ def run(switch, value, bucket, pos1, opt1, opt2, tail):
             "\topt1:{}".format(opt1),
             "\topt2:{}".format(opt2),
             "\ttail:{}".format(tail),
+            "",
     ]
     return "\n".join(output)
 
-if __name__ == '__main__':
-    cli.main(root)
+root.main(__name__)

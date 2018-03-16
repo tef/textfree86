@@ -13,7 +13,7 @@ ARGTYPES=[x.strip() for x in """
     scalar
     infile outfile
 """.split() if x]
-#   rwfile jsonfile textfile
+#   stretch goals: rwfile jsonfile textfile
 
 def parse_argspec(argspec):
     """
@@ -512,7 +512,7 @@ class wire:
     @codec.register()
     class BadArg(Exception):
         def action(self, path):
-            return wire.Action("error", path, {'usage':True}, errors=self.args)
+            return cli.Action("error", path, {'usage':True}, errors=self.args)
 
     @codec.register()
     class FileHandle:
@@ -540,14 +540,6 @@ class wire:
             self.value = value
             self.file_handles = file_handles
             
-    @codec.register()
-    class Action:
-        def __init__(self, mode, command, argv, errors=()):
-            self.mode = mode
-            self.path = command
-            self.argv = argv
-            self.errors = errors
-
     @codec.register()
     class Command:
         def __init__(self, prefix, name, subcommands, short, long, argspec):
@@ -601,21 +593,21 @@ class wire:
                 # no argspec, print usage
                 if argv and argv[0]:
                     if argv[0] == "help":
-                        return wire.Action("help", path, {'usage': False})
+                        return cli.Action("help", path, {'usage': False})
                     elif "--help" in argv:
-                        return wire.Action("help", path, {'usage': True})
+                        return cli.Action("help", path, {'usage': True})
                     elif self.subcommands:
-                        return wire.Action("error", path, {'usage':True}, errors=("unknown command: {}".format(argv[0]),))
+                        return cli.Action("error", path, {'usage':True}, errors=("unknown command: {}".format(argv[0]),))
                     else:
-                        return wire.Action("error", path, {'usage':True}, errors=("unknown option: {}".format(argv[0]),))
+                        return cli.Action("error", path, {'usage':True}, errors=("unknown option: {}".format(argv[0]),))
 
-                return wire.Action("help", path, {'usage': False})
+                return cli.Action("help", path, {'usage': False})
             else:
                 if '--help' in argv:
-                    return wire.Action("help", path, {'usage':True})
+                    return cli.Action("help", path, {'usage':True})
                 try:
                     args = parse_args(self.argspec, argv, environ)
-                    return wire.Action("call", path, args)
+                    return cli.Action("call", path, args)
                 except wire.BadArg as e:
                     return e.action(path)
 
@@ -683,33 +675,32 @@ class wire:
 
 
 class cli:
-    class LocalService:
+    class Action:
+        def __init__(self, mode, command, argv, errors=()):
+            self.mode = mode
+            self.path = command
+            self.argv = argv
+            self.errors = errors
+
+    class FakeNetwork:
         def __init__(self, root):
             self.root = root
-    
-        def render(self):
-            return codec.dump(self.root.render(), bytearray())
-
-        def call(self, pathbuf, argvbuf):
-            path, _ = codec.parse(pathbuf, 0)
-            argv, _ = codec.parse(argvbuf, 0)
-            result =  self.root.call(path, argv)
-            return codec.dump(result, bytearray())
-
-    class LocalClient:
-        def __init__(self, service):
-            self.service = service
 
         def render(self):
-            buf = self.service.render()
+            buf = codec.dump(self.root.render(), bytearray())
             obj, _ = codec.parse(buf, 0)
             return obj
 
         def call(self, path, argv):
             path = codec.dump(path, bytearray())
             argv = codec.dump(argv, bytearray())
-            outbuf = self.service.call(path, argv)
-            result, _ = codec.parse(outbuf,0)
+            path, _ = codec.parse(path, 0)
+            argv, _ = codec.parse(argv, 0)
+
+            result = self.root.call(path, argv)
+            buf = codec.dump(result, bytearray())
+            result, _ = codec.parse(buf,0)
+
             return result
 
     class Command:
@@ -837,32 +828,38 @@ class cli:
         def __call__(self, **kwargs):
             return self.run_fn(**args)
 
+        def main(self, name):
+            if name == '__main__':
+                argv = sys.argv[1:]
+                environ = os.environ
+
+                root = cli.FakeNetwork(self)
+                cli.run(root, argv, environ)
+
     #end Command
 
-    def main(root):
-        argv = sys.argv[1:]
-        environ = os.environ
+    def main():
+        pass
 
-        root = cli.LocalClient(cli.LocalService(root))
-
+    def run(root, argv, environ):
         obj = root.render()
 
         if 'COMP_LINE' in environ and 'COMP_POINT' in environ:
-            arg, offset =  os.environ['COMP_LINE'], int(os.environ['COMP_POINT'])
+            arg, offset =  environ['COMP_LINE'], int(environ['COMP_POINT'])
             tmp = arg[:offset].rsplit(' ', 1)
             if len(tmp) > 1:
-                action = wire.Action('complete', tmp[0].split(' ')[1:], tmp[1])
+                action = cli.Action('complete', tmp[0].split(' ')[1:], tmp[1])
             else:
-                action = wire.Action('complete', [], tmp[0])
+                action = cli.Action('complete', [], tmp[0])
         elif argv and argv[0] in ("help"):
             argv.pop(0)
             use_help = True
             action = obj.parse_args([], argv, environ)
-            action = wire.Action("help", action.path, {'manual': True})
+            action = cli.Action("help", action.path, {'manual': True})
         elif argv and argv[0] == '--version':
-            action = wire.Action("version", [], {})
+            action = cli.Action("version", [], {})
         elif argv and argv[0] == '--help':
-            action = wire.Action("help", [], {'usage': True})
+            action = cli.Action("help", [], {'usage': True})
         else:
             action = obj.parse_args([], argv, environ)
     
@@ -937,8 +934,6 @@ class cli:
         if result is not None:
             if isinstance(result, (bytes, bytearray)):
                 sys.stdout.buffer.write(result)
-            elif isinstance(result, str):
-                sys.stdout.write(result)
             else:
                 print(result)
 

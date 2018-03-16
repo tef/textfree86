@@ -34,5 +34,5 @@ two = demo.subcommand('write', 'write a file')
 def two_run(file):
     file.write(b"Test\n\n\n")
 
-if __name__ == '__main__':
-    cli.main(demo)
+demo.main(__name__)
+

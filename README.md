@@ -200,10 +200,10 @@ The `textfree86` program wraps up any input, streams it to the remote server, an
 ### Bash Completion (Sort-of)
 
 ```
-complete -o nospace,default -c <command> <command>
+complete -o nospace -c <command> <command>
 ```
 
-Currently only option flag names are completed
+Currently only subcommands and option flag names are completed
 
 ## Network Mode (Not Yet)
 
