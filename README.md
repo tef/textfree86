@@ -1,4 +1,4 @@
-# TextFree86: Finally, a network transparent getopt(3)
+# TextFree86: Finally, a network transparent option parser!
 
 This readme is semi-fictional. It is not ready for an audience yet. I'd appreciate if you didn't link to it, thank you.
 
@@ -38,6 +38,9 @@ cmd = cli.Command('florb','florb the morps')
 @cmd.run()
 def cmd_run():
     return 'Hello, World'
+
+if __name__ == '__main__':
+    cli.main(cmd)
 ```
 
 and `florb help` and `florb --help` work too. 
@@ -52,7 +55,7 @@ You could implement this as a simpler script: Dump the raw arguments into HTTP, 
 
 Both of these things require the client to know a little bit more about parsing the command line, or be given instructions by the server on how to do it. When the client knows in advance, it has to be updated with every change to the service.
 
-Instead, `textfree86` only needs one URL (and maybe credentials) to run a command.
+Instead, `textfree86` only needs one URL (and maybe credentials) to run a command. 
 
 ## Again, Why?
 
@@ -63,11 +66,14 @@ Let's say you've written a deployment script, `deploy.py`.
 
 Now? You run your deploy script as a service, and everyone uses the same CLI, but remotely.
 
-## An Example Program
+## Parsing Command Line arguments with `textfree86`:
+
+### An Example Program
 
 A textfree86 program consists of `cli.Commands()`, chained together, used to decorate functions to dispatch:
 
 ```
+cmd = cli.Command('florb','florb the morps')
 @cmd.run("one [two] [three...]")
 def cmd_run(one, two, three):
     return [one, two, three]
@@ -107,7 +113,7 @@ def subcommand_run(...):
 
 The parameter to `run()`, is called an argspec.
 
-## Parsing Command Line arguments.
+### Argspec
 
 An argspec is a string that describes how to turn CLI arguments into a dictionary of name, value pairs. For example:
 
