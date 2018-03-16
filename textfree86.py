@@ -682,7 +682,7 @@ class cli:
             self.argv = argv
             self.errors = errors
 
-    class FakeNetwork:
+    class FakeRemoteCommand:
         def __init__(self, root):
             self.root = root
 
@@ -833,10 +833,21 @@ class cli:
                 argv = sys.argv[1:]
                 environ = os.environ
 
-                root = cli.FakeNetwork(self)
+                root = cli.FakeRemoteCommand(self)
                 cli.run(root, argv, environ)
 
     #end Command
+
+    class RemoteCommand:
+        def __init__(self, url):
+            self.url = url
+
+        def render(self):
+            pass
+
+
+        def call(self, path, args):
+            pass
 
     def main():
         pass
