@@ -573,7 +573,6 @@ class cli:
             elif self.run_fn:
                 if len(argv) == self.nargs:
                     return self.invoke(argv)
-
                 else:
                     return wire.Result(-1, "bad options")
             else:
@@ -583,14 +582,6 @@ class cli:
                     return wire.Result(-1, self.render.usage())
 
         def invoke(self, argv):
-            argv, file_handles = self.make_file_handles(argv)
-            result = self.run_fn(**argv)
-            if isinstance(result, types.GeneratorType):
-                result = list(result)
-            file_handles = self.process_file_handles(file_handles)
-            return wire.Result(0, result, file_handles=file_handles)
-
-        def make_file_handles(self, argv):
             args = {}
             file_handles = {}
             for name, value in argv.items():
@@ -606,15 +597,20 @@ class cli:
                         file_handles[name] = [buf]
                 else:
                     args[name] = value
-            return args, file_handles
 
-        def process_file_handles(self, out):
-            file_handles = {}
-            for name, fhs in out.items():
-                file_handles[name] = []
+            result = self.run_fn(**args)
+
+            if isinstance(result, types.GeneratorType):
+                result = list(result)
+
+            output_fhs = {}
+            for name, fhs in file_handles.items():
+                output_fhs[name] = []
                 for fh in fhs:
-                    file_handles[name].append(fh.getvalue())
-            return file_handles
+                    output_fhs[name].append(fh.getvalue())
+
+            return wire.Result(0, result, file_handles=output_fhs)
+
     #end Command
 
     def main(root):
