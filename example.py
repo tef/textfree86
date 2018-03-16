@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from textfree86 import cli
 
 root = cli.Command('example', 'cli example programs')
