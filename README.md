@@ -1,4 +1,4 @@
-# TextFree86: Finally, a network transparent option parser!
+## TextFree86: Finally, a network transparent option parser!
 
 This readme is not ready for an audience yet. I'd appreciate if you didn't link to it, thank you.
 
@@ -15,6 +15,7 @@ Wrote uptime to log
 $ cat log.1
  5:59  up 2 days, 13:31, 12 users, load averages: 0.83 0.93 1.05
 
+# Tell bash how to find completion information: (logdetails does it!)
 $ complete -o nospace -C ./logdetails ./logdetails
 
 $ ./logdetails --u<TAB>     # Using Tab Completion
@@ -32,13 +33,15 @@ $ ssh machine ./logdetails  --<TAB>   # tab completion is for ssh, not grep
 If you use `textfree86`, well, some things **do** work the same:
 
 ```
-$ ./textfree86.py ssh hostname /path/to/logdetails --pipe -- output.log --uname
+$ ./textfree86.py 'ssh hostname /path/to/logdetails --pipe' -- output.log --uname
 Wrote uname to log
 
-$ cat output.log    # But on the local machine!
+$ cat output.log    # Written on the local machine!
 Darwin
 
+# We add alias, so we can add bash completion
 $ alias rlogdetails='./textfree86.py ssh hostname /path/to/logdetails --pipe --'
+
 $ rlogdetails --help
 usage: logdetails [--uptime] [--uname] <output>
 
