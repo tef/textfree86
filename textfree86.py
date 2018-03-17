@@ -692,27 +692,6 @@ class cli:
             self.argv = argv
             self.errors = errors
 
-    class FakeRemoteCommand:
-        def __init__(self, root):
-            self.root = root
-
-        def render(self):
-            buf = codec.dump(self.root.render(), bytearray())
-            obj, _ = codec.parse(buf, 0)
-            return obj
-
-        def call(self, path, argv):
-            path = codec.dump(path, bytearray())
-            argv = codec.dump(argv, bytearray())
-            path, _ = codec.parse(path, 0)
-            argv, _ = codec.parse(argv, 0)
-
-            result = self.root.call(path, argv)
-            buf = codec.dump(result, bytearray())
-            result, _ = codec.parse(buf,0)
-
-            return result
-
     class Command:
         def __init__(self, name, short=None, long=None):
             self.name = name
@@ -848,12 +827,23 @@ class cli:
         argv = sys.argv[1:]
         environ = os.environ
         if argv == ["--pipe"]:
-            sys.exit(cli.offer_pipe(root))
+            sys.exit(cli.serve_pipe(root, sys.stdin.buffer, sys.stdout.buffer))
+        elif argv and argv[0] == "--run":
+            sys.exit(cli.run_pipe(argv[1:]))
         else:
-            root = cli.FakeRemoteCommand(root)
-            sys.exit(cli.run(root, argv, environ))
+            input_r, input_w = os.pipe()
+            output_r, output_w = os.pipe()
+            pid = os.fork()
+            if pid == 0: # child
+                code = (cli.serve_pipe(root, os.fdopen(input_r, 'rb'), os.fdopen(output_w, 'wb')))
+                sys.exit(code)
+            else:
+                cmd = cli.PipeClient(os.fdopen(input_w, 'wb'), os.fdopen(output_r, 'rb'))
+                code = cli.run(cmd, argv, environ)
+                os.write(input_w, b'\n')
+                sys.exit(code)
 
-    def open_pipe(args):
+    def run_pipe(args):
         if '--' in args:
             split = args.index('--')
             cmd, args = " ".join(args[:split]), args[split+1:]
@@ -868,18 +858,18 @@ class cli:
         )
         root = cli.PipeClient(p.stdin, p.stdout)
         ret = cli.run(root, args, os.environ)
+        p.stdin.write(b'\n')
         p.stdin.close()
         p.wait()
         return ret
 
 
-    def offer_pipe(root):
-        #print('offering', file=sys.stderr)
-        while not sys.stdin.buffer.closed and not sys.stdout.buffer.closed:
-            line = sys.stdin.buffer.readline()
+    def serve_pipe(root, stdin, stdout):
+        while not stdin.closed and not stdout.closed:
+            line = stdin.readline().decode('ascii').strip()
             if not line: break
-            size = int(line.decode('ascii').strip())
-            buf = sys.stdin.buffer.read(size)
+            size = int(line)
+            buf = stdin.read(size)
             obj, _ = codec.parse(buf, 0)
 
             if obj.action == "render":
@@ -889,11 +879,10 @@ class cli:
 
             buf = codec.dump(response, bytearray())
 
-            sys.stdout.buffer.write(b"%d\n" % (len(buf)))
-            sys.stdout.buffer.write(buf)
-            sys.stdout.buffer.flush()
+            stdout.write(b"%d\n" % (len(buf)))
+            stdout.write(buf)
+            stdout.flush()
         return 0
-
 
     class PipeClient:
         def __init__(self, request, response):
@@ -943,6 +932,7 @@ class cli:
             action = cli.Action("help", [], {'usage': True})
         else:
             action = obj.parse_args([], argv, environ)
+
     
         if action.mode == "complete":
             result = obj.complete(action.path, action.argv)
@@ -1017,11 +1007,12 @@ class cli:
                 sys.stdout.buffer.write(result)
             else:
                 print(result)
+            sys.stdout.flush()
 
         return exit_code
 
 if __name__ == '__main__':
     argv = sys.argv[1:]
-    sys.exit(cli.open_pipe(argv))
+    sys.exit(cli.run_pipe(argv))
 
 

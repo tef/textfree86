@@ -82,7 +82,7 @@ Let's say you've written a deployment script, `deploy.py`. You want other people
 
 You could replace the deploy script with an admin UI, but that might require a little more usability. You could write a service, use a RPC library, and then write a remote CLI to connect to it. You could all ssh into the same machine, but uploading/downloading configuration files is clumsy.
 
-TextFree86 presents another option: Run the program on one machine, but connect to it from another, without having to write a new remote CLI each time.
+TextFree86 presents another option: Run the program on one machine, but connect to it from another, without having to install a new remote CLI each time the command changes.
 
 ## Why Would You Do This?
 
