@@ -1,72 +1,106 @@
 # TextFree86: Finally, a network transparent option parser!
 
-This readme is semi-fictional. It is not ready for an audience yet. I'd appreciate if you didn't link to it, thank you.
+This readme is not ready for an audience yet. I'd appreciate if you didn't link to it, thank you.
 
-TextFree86 is a CLI framework that lets you run your command line program across the network.
+TextFree86 is a CLI toolkit that lets people run a command on one machine, but have inputs and outputs on another.
 
-Take a `textfree86` program,
+## What?
 
-```
-$ florb
-Hello, World!
-```
-
-... serve it over the network, 
+If you have a command line program, you can expect some things to work: passing in a file name, and if you're lucky, tab completion:
 
 ```
-$ florb :serve --port=1729
+$ ./logdetails --uptime log.1
+Wrote uptime to log
+
+$ cat log.1
+ 5:59  up 2 days, 13:31, 12 users, load averages: 0.83 0.93 1.05
+
+$ complete -o nospace -C ./logdetails ./logdetails
+
+$ ./logdetails --u<TAB>     # Using Tab Completion
+--uname   --uptime  
 ```
 
-... and run it from another machine, using the standalone `textfree86` command!
+If you have a command line program, and you run it via `ssh`, or `docker run`, some things just don't work the same.
 
 ```
-$ alias remoteflorb='textfree86 http://1.2.3.4:1729/florb/ --'
-$ remoteflorb
-Hello, world!
+$ ssh machine ./logdetails filename   # filename is local to that machine
+
+$ ssh machine ./logdetails  --<TAB>   # tab completion is for ssh, not grep
 ```
 
-(soon!)
-
-The `textfree86` program doesn't need any configuration beyond the URL and any credentials to access the remote CLI.
-
-The `florb` command doesn't need much configuration, either:
+If you use `textfree86`, well, some things **do** work the same:
 
 ```
+$ ./textfree86.py ssh hostname /path/to/logdetails --pipe -- output.log --uname
+Wrote uname to log
+
+$ cat output.log    # But on the local machine!
+Darwin
+
+$ alias rlogdetails='./textfree86.py ssh hostname /path/to/logdetails --pipe --'
+$ rlogdetails --help
+usage: logdetails [--uptime] [--uname] <output>
+
+$ complete -o nospace -C rlogdetails rlogdetails
+$ rlogdetails --u<TAB>    # Using Tab Completion
+--uname   --uptime        # Yes, this calls ssh underneath!
+```
+
+To complete the example, here's the code for `logdetails`:
+
+```
+import subprocess
 from textfree86 import cli
 
-cmd = cli.Command('florb','florb the morps')
-@cmd.run()
-def cmd_run():
-    return 'Hello, World'
+cmd = cli.Command('logdetails','write the uptime, uname, etc to a given file')
+@cmd.run('--uptime? --uname? output:outfile') # this describes how to parse cmd line args
+def cmd_run(uptime, uname, output): # uptime, uname are boolean, output is a filehandle
+    out = []
+    if uptime:
+        p= subprocess.run("uptime", stdout=subprocess.PIPE)
+        output.write(p.stdout)
+        out.append("uptime")
+    if uname:
+        p= subprocess.run("uname", stdout=subprocess.PIPE)
+        output.write(p.stdout)
+        out.append("uname")
+    if out:
+        return "Wrote {} to log".format(",".join(out))
+    else:
+        return "Wrote nothing to log, try --uname/--uptime"
 
-if __name__ == '__main__':
-    cli.main(cmd)
+cmd.main(__name__) 
 ```
 
-and `florb help` and `florb --help` work too. 
+## Why Would Anyone Do This?
 
-## But... Why?
+Let's say you've written a deployment script, `deploy.py`. You want other people to use it, but you're having trouble getting everyone to use the same copy. 
 
-One friend: "why have protocols when you have to write a new client for each service"
+You could replace the deploy script with an admin UI, but that might require a little more usability. You could write a service, use a RPC library, and then write a remote CLI to connect to it. You could all ssh into the same machine, but uploading/downloading configuration files is clumsy.
 
-Another: "Oh! This is like docker run, without docker!"
+TextFree86 presents another option: Run the program on one machine, but connect to it from another, without having to write a new remote CLI each time.
 
-You could implement this as a simpler script: Dump the raw arguments into HTTP, and print the output. This works up until you want tab completion, or passing in files to the command.
+## Why Would You Do This?
 
-Both of these things require the client to know a little bit more about parsing the command line, or be given instructions by the server on how to do it. When the client knows in advance, it has to be updated with every change to the service.
+I've written a lot of Client-Server code, and as one friend stated: "Why do we have protocols anyway? You have to write a new client for each service!"
 
-Instead, `textfree86` only needs one URL (and maybe credentials) to run a command. 
+Although there are many reusable libraries, there are very few reusable tools. TextFree86 tries to demonstrate the possibilities for a reusable, somewhat generic remote CLI tool.
 
-## Again, Why?
+It currently works over a pipe, but could as easily run over TCP or HTTP too. 
 
-Let's say you've written a deployment script, `deploy.py`. 
+```
+# Running this on one machine
+$ ./command --serve --port=1729
 
-- You want other people to use it,
-- ... but you're having trouble getting everyone to use the same copy
 
-Now? You run your deploy script as a service, and everyone uses the same CLI, but remotely.
+# ... and this on another
+$ ./textfree86 --url http://host/command -- <args>
+```
 
-## Parsing Command Line arguments with `textfree86`:
+(but that isn't implemented yet, be patient)
+
+## How do I use the Library?
 
 ### An Example Program
 
@@ -173,10 +207,11 @@ An untyped field tries to convert the argument to an integer or floating point n
 
 This might be a bad idea, but it is up to the client on how best to interpret arguments.  
 
-
-### Files, Paths, Directories (Sort of) 
+### Files
 
 Files can also be sent as command line arguments, or written to as output from the program.
+
+This function gets two file handle like objects passed in:
 
 ```
 @subcommand.run("data:infile output:outfile")
@@ -185,55 +220,45 @@ def subcommand_run(data, output):
         output.write(line)
 ```
 
-### Environment Variables, Local Configuration (Not Yet)
+### Stretch Goals: Environment Variables, Paths, Config Files
 
-Instead of positional options or option flags, program configuration can be stored in environment variables, or local files. These can be overridden by option flags too.
+Maybe `cmd subcommand --foo='...'` could use `foo:env` as the argspec to  from `CMD_SUBCOMMAND_FOO` or `--env=<...>` on the command line. Similarly, types for directories, or config files.
 
-A command `cmd subcommand` with environment setting `env`, can read from `CMD_SUBCOMMAND_ENV` or `--env=<...>` on the command line.
+### Stretch Goals: Stdin/Stdout/Stderr and Streams
 
-An option should be able to default to using a known file, too.
+Files work by sending over the entire contents before and after, but a different approach is needed for streams. Please Wait.
 
-### Stdin/Stdout (Not Yet)
+## Using it
 
-The `textfree86` program wraps up any input, streams it to the remote server, and streams back any output.
+### Bash Completion
 
-### Bash Completion (Sort-of)
+Currently: subcommand names, `--option`s
 
 ```
 complete -o nospace -c <command> <command>
 ```
 
-Currently only subcommands and option flag names are completed
+### Pipe Mode 
 
-## Network Mode (Not Yet)
-
-With the command/subcommand classes, the CLI framework looks like a Router inside a web framework. Bash completion means being able to expose options without running the command.
-
-The `textfree86` client asks for the completition information, parses the command line arguments, sends them across the network, and prints the responses. 
+You can skip the ssh part:
 
 ```
-$ textfree86 http://address/ -- help
+$ ./textfree86.py ./script.py --pipe -- <args to script>
 ```
 
-### Server
+The format is `<script to run, ending with --pipe>`, `--`, `<args to script>`.
 
-### Proxy
+### Stretch Goals: Caching
 
-### Offline Client
+Keeping a copy of the command description around to speed up tab completion.
 
-### API (Not Yet)
+### Stretch Goals: Server, Proxy
 
-This project evolved from writing a CLI debugger for networked services. As I started writing option parsers inside the client, I realised I'd made a huge mistake. 
+Instead of using a pipe, HTTP is an option. Using plain old GETs to find descriptions of commands, and either through long polling, or websocket to run one.
 
-Even so, one day:
+It should be possible to proxy a command, as well as proxy to commands on different machines.
 
-```
-import textfree86
+### Stretch Goals: API 
 
-cmd = cli.RemoteCommand(url)
-
-print(cmd.subcommand(name=1, name=2))
-```
-
-If you're after something more like this, you might be curious about the RPC systems that this CLI kit evolved from.
+I guess this means documenting my code. Oh well.
 
