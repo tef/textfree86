@@ -6,16 +6,17 @@ import sys
 import types
 import itertools
 import subprocess
+from enum import Enum
 
 
-ARGTYPES=[x.strip() for x in """
+ARGTYPES = Enum('ArgType', """
     bool boolean
     int integer
     float num number
     str string
     scalar
     infile outfile
-""".split() if x]
+""")
 #   stretch goals: rwfile jsonfile textfile
 
 def parse_argspec(argspec):
@@ -78,7 +79,7 @@ def parse_argspec(argspec):
             return arg
         if ':' in arg:
             name, atype = arg.split(':')
-            if atype not in ARGTYPES:
+            if getattr(ARGTYPES, atype, None) is None:
                 raise wire.BadArg("option {} has unrecognized type {}".format(name, atype))
             argtypes[name] = atype 
         else:
