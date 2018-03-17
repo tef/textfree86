@@ -1,4 +1,4 @@
-## TextFree86: Finally, a network transparent option parser!
+# TextFree86: Finally, a network transparent option parser!
 
 This readme is not ready for an audience yet. I'd appreciate if you didn't link to it, thank you.
 
