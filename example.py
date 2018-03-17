@@ -22,8 +22,8 @@ def echocmd(line, reverse):
         return (" ".join(x for x in line))[::-1]
     return " ".join(x for x in line)
 
-demo2 = root.subcommand('demo', "demo of argspec")
-@demo2.run('''
+demo = root.subcommand('demo', "demo of argspec")
+@demo.run('''
     --switch?       # a demo switch
     --value:str     # pass with --value=...
     --bucket:int... # a list of numbers 
@@ -45,19 +45,16 @@ def run(switch, value, bucket, pos1, opt1, opt2, tail):
     ]
     return "\n".join(output)
 
-demo = demo2.subcommand('demo', "demo of argspec")
-@demo.run('--switch? --value --bucket... pos1 [opt1] [opt2] [tail...]')
-def run(switch, value, bucket, pos1, opt1, opt2, tail):
-    output = [ 
-            "\tswitch:{}".format(switch),
-            "\tvalue:{}".format(value),
-            "\tbucket:{}".format(bucket),
-            "\tpos1:{}".format(pos1),
-            "\topt1:{}".format(opt1),
-            "\topt2:{}".format(opt2),
-            "\ttail:{}".format(tail),
-            "",
-    ]
-    return "\n".join(output)
+one = root.subcommand('cat','print a file')
+@one.run("files:infile...")
+def one_run(files):
+    return b"".join(file.read() for file in files)
+
+two = root.subcommand('write', 'write a file')
+@two.run("file:outfile")
+def two_run(file):
+    file.write(b"Test\n\n\n")
 
 root.main(__name__)
+
+
