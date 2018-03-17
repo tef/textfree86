@@ -1,8 +1,11 @@
+#!/usr/bin/env python3
+
 import io
 import os
 import sys
 import types
 import itertools
+import subprocess
 
 
 ARGTYPES=[x.strip() for x in """
@@ -534,7 +537,14 @@ class wire:
             self.descriptions = descriptions
 
     @codec.register()
-    class Result:
+    class Request:
+        def __init__(self, action, path, argv):
+            self.action = action
+            self.path = path
+            self.argv = argv
+
+    @codec.register()
+    class Response:
         def __init__(self, exit_code, value, file_handles=()):
             self.exit_code = exit_code
             self.value = value
@@ -768,12 +778,12 @@ class cli:
                 if len(argv) == self.nargs:
                     return self.invoke(argv)
                 else:
-                    return wire.Result(-1, "bad options")
+                    return wire.Response(-1, "bad options")
             else:
                 if len(argv) == 0:
-                    return wire.Result(0, self.render().manual())
+                    return wire.Response(0, self.render().manual())
                 else:
-                    return wire.Result(-1, self.render.usage())
+                    return wire.Response(-1, self.render.usage())
 
         def invoke(self, argv):
             args = {}
@@ -823,34 +833,94 @@ class cli:
                 for fh in fhs:
                     output_fhs[name].append(fh.getvalue())
 
-            return wire.Result(0, result, file_handles=output_fhs)
+            return wire.Response(0, result, file_handles=output_fhs)
 
         def __call__(self, **kwargs):
             return self.run_fn(**args)
 
         def main(self, name):
             if name == '__main__':
-                argv = sys.argv[1:]
-                environ = os.environ
-
-                root = cli.FakeRemoteCommand(self)
-                cli.run(root, argv, environ)
+                cli.main(self)
 
     #end Command
 
-    class RemoteCommand:
-        def __init__(self, url):
-            self.url = url
+    def main(root):
+        argv = sys.argv[1:]
+        environ = os.environ
+        if argv == ["--pipe"]:
+            sys.exit(cli.offer_pipe(root))
+        else:
+            root = cli.FakeRemoteCommand(root)
+            sys.exit(cli.run(root, argv, environ))
+
+    def open_pipe(args):
+        if '--' in args:
+            split = args.index('--')
+            cmd, args = " ".join(args[:split]), args[split+1:]
+        else:
+            cmd, args = args[0], args[1:]
+
+        p = subprocess.Popen(
+            cmd,
+            shell = True,
+            stdin = subprocess.PIPE,
+            stdout = subprocess.PIPE,
+        )
+        root = cli.PipeClient(p.stdin, p.stdout)
+        ret = cli.run(root, args, os.environ)
+        p.stdin.close()
+        p.wait()
+        return ret
+
+
+    def offer_pipe(root):
+        #print('offering', file=sys.stderr)
+        while not sys.stdin.buffer.closed and not sys.stdout.buffer.closed:
+            line = sys.stdin.buffer.readline()
+            if not line: break
+            size = int(line.decode('ascii').strip())
+            buf = sys.stdin.buffer.read(size)
+            obj, _ = codec.parse(buf, 0)
+
+            if obj.action == "render":
+                response = root.render()
+            elif obj.action == "call":
+                response = root.call(obj.path, obj.argv)
+
+            buf = codec.dump(response, bytearray())
+
+            sys.stdout.buffer.write(b"%d\n" % (len(buf)))
+            sys.stdout.buffer.write(buf)
+            sys.stdout.buffer.flush()
+        return 0
+
+
+    class PipeClient:
+        def __init__(self, request, response):
+            self.request = request 
+            self.response = response
 
         def render(self):
-            pass
+            obj = wire.Request("render", None, None)
+            buf = codec.dump(obj, bytearray())
+            self.request.write(b"%d\n"%(len(buf)))
+            self.request.write(buf)
+            self.request.flush()
+            size = int(self.response.readline().strip())
+            buf = self.response.read(size)
+            obj, _ = codec.parse(buf, 0)
+            return obj
 
-
-        def call(self, path, args):
-            pass
-
-    def main():
-        pass
+        def call(self, path, argv):
+            obj = wire.Request("call", path, argv)
+            buf = codec.dump(obj, bytearray())
+            self.request.write(b"%d\n"%(len(buf)))
+            self.request.write(buf)
+            self.request.flush()
+            size = int(self.response.readline().strip())
+            buf = self.response.read(size)
+            obj, _ = codec.parse(buf, 0)
+            return obj
 
     def run(root, argv, environ):
         obj = root.render()
@@ -878,7 +948,7 @@ class cli:
             result = obj.complete(action.path, action.argv)
             for line in result:
                 print(line)
-            sys.exit(0)
+            return 0
         elif action.mode == "call":
             file_handles = {}
             argv = {}
@@ -918,7 +988,7 @@ class cli:
 
             result =  root.call(action.path, argv)
 
-            if file_handles and isinstance(result, wire.Result) and result.file_handles:
+            if file_handles and isinstance(result, wire.Response) and result.file_handles:
                 for name, fhs in file_handles.items():
                     for idx, fh in enumerate(fhs):
                         fh.write(result.file_handles[name][idx])
@@ -936,7 +1006,7 @@ class cli:
             print("error: {}".format(", ".join(action.errors)))
             result = obj.help(action.path, usage=action.argv.get('usage'))
 
-        if isinstance(result, wire.Result):
+        if isinstance(result, wire.Response):
             exit_code = result.exit_code
             result = result.value
         else:
@@ -948,5 +1018,10 @@ class cli:
             else:
                 print(result)
 
-        sys.exit(exit_code)
+        return exit_code
+
+if __name__ == '__main__':
+    argv = sys.argv[1:]
+    sys.exit(cli.open_pipe(argv))
+
 
