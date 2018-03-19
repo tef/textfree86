@@ -1,4 +1,4 @@
-# TextFree86: Finally, a network transparent command line!
+# TextFree86: A network transparent command line framework.
 
 *This readme is not ready for an audience yet. I'd appreciate if you didn't link to it, thank you*
 
