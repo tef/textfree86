@@ -761,7 +761,7 @@ class cli:
                 return self.subcommands[path[0]].call(path[1:], argv)
             elif self.run_fn:
                 if len(argv) == self.nargs:
-                    return cli.Session(self.run_fn, argv)
+                    return wire.Session(self.spawn(argv))
                 else:
                     return wire.Response(-1, "bad options")
             else:
@@ -777,50 +777,67 @@ class cli:
             if name == '__main__':
                 cli.main(self)
 
+        def spawn(self, argv):
+            session = cli.Session(self.run_fn, argv)
+            session.fork()
+            return session
+        
+        def poll(self, session, file_handles):
+            return session.poll(file_handles)
+
     #end Command
 
     class Session():
         def __init__(self, run_fn, argv):
+            self.run_fn = run_fn
+            self.argv = argv
+
+
+        def fork(self):
             args = {}
             file_handles = {}
-            for name, values in argv.items():
+            for name, values in self.argv.items():
                 if isinstance(values, list):
                     out = []
                     for value in values:
-                        if isinstance(value, wire.FileHandle):
-                            if value.mode == "read":
-                                buf = io.BytesIO()
-                                buf.write(value.buf)
-                                buf.seek(0)
-                                out.append(buf)
-                            elif value.mode == "write":
-                                buf = io.BytesIO()
-                                out.append(buf)
-                                if name not in file_handles: file_handles[name] = []
-                                file_handles[name].append(buf)
-                        else:
-                            out.append(value)
+                        value, wrapped = self.create_fh(value)
+                        if wrapped:
+                            if name not in file_handles: file_handles[name] = []
+                            file_handles[name].append(value)
+                        out.append(value)
                     args[name] = out
                 
                 else:
-                    value = values
-                    if isinstance(values, wire.FileHandle):
-                        if value.mode == "read":
-                            buf = io.BytesIO()
-                            buf.write(value.buf)
-                            buf.seek(0)
-                            args[name] = buf
-                        elif value.mode == "write":
-                            buf = io.BytesIO()
-                            args[name] = buf
-                            file_handles[name] = [buf]
-                    else:
-                        args[name] = value
+                    value, wrapped = self.create_fh(values)
+                    if wrapped:
+                        file_handles[name] = [value]
+
             self.file_handles = file_handles
-            self.result = run_fn(**args)
+            # spawn pipes for any streams, and wrap them in fdopen
+            # store them in self.pipes
+            # fork, dup over std* and run function
+            self.result = self.run_fn(**args)
+            #  in child, write output to result pipe
+            # else store pid
 
+        def create_fh(self, value):
+            if isinstance(value, wire.FileHandle):
+                if value.mode == "read":
+                    buf = io.BytesIO()
+                    buf.write(value.buf)
+                    buf.seek(0)
+                    return buf, True
+                elif value.mode == "write":
+                    buf = io.BytesIO()
+                    out.append(buf)
+                    return buf, True
+            return value, False
 
-        def poll(self, client_file_handles):
+        def poll(self, client_file_handles=()):
+            # copy input into input pipes
+            # read output from output pipes, 
+            # read result and store it if done
+            # if no session data to return, return the result
             result = self.result
 
             if isinstance(result, types.GeneratorType):
@@ -835,6 +852,7 @@ class cli:
             return wire.Response(0, result, file_handles=output_fhs)
 
         def close(self):
+            # clean up pipes/pid
             pass
 
     def main(root):
@@ -844,7 +862,7 @@ class cli:
             sys.exit(cli.serve_pipe(root, sys.stdin.buffer, sys.stdout.buffer))
         elif argv and argv[0] == "--run":
             sys.exit(cli.run_pipe_client(argv[1:]))
-        elif False: # 'COMP_LINE' in environ and 'COMP_POINT' in environ:
+        elif True or False: # 'COMP_LINE' in environ and 'COMP_POINT' in environ:
             code = cli.run(root, argv, environ)
         else:
             input_r, input_w = os.pipe()
@@ -896,9 +914,8 @@ class cli:
                     response = root.render()
                 elif obj.action == "call":
                     response = root.call(obj.path, obj.argv)
-                    response = response.poll({})
-                    if isinstance(response, cli.Session):
-                        sessions.append(response)
+                    if isinstance(response,wire.Session):
+                        sessions.append(response.idx)
                         response = wire.Session(len(sessions)-1)
                 elif obj.action == "poll":
                     s = sessions[obj.path]
