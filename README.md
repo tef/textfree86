@@ -1,8 +1,5 @@
 # TextFree86: Finally, a network transparent command line!
 
-TextFree86 is a framework for writing network-transparent command-line tools.
-
-
 *This readme is not ready for an audience yet. I'd appreciate if you didn't link to it, thank you*
 
 ## Network transparent means more than just SSH
