@@ -829,7 +829,9 @@ class cli:
         if argv == ["--pipe"]:
             sys.exit(cli.serve_pipe(root, sys.stdin.buffer, sys.stdout.buffer))
         elif argv and argv[0] == "--run":
-            sys.exit(cli.run_pipe(argv[1:]))
+            sys.exit(cli.run_pipe_client(argv[1:]))
+        elif False: # 'COMP_LINE' in environ and 'COMP_POINT' in environ:
+            code = cli.run(root, argv, environ)
         else:
             input_r, input_w = os.pipe()
             output_r, output_w = os.pipe()
@@ -843,7 +845,7 @@ class cli:
                 os.write(input_w, b'\n')
                 sys.exit(code)
 
-    def run_pipe(args):
+    def run_pipe_client(args):
         if '--' in args:
             split = args.index('--')
             cmd, args = " ".join(args[:split]), args[split+1:]
@@ -857,25 +859,31 @@ class cli:
             stdout = subprocess.PIPE,
         )
         root = cli.PipeClient(p.stdin, p.stdout)
-        ret = cli.run(root, args, os.environ)
-        p.stdin.write(b'\n') # break out of readline()
-        p.stdin.close()
-        p.wait()
+        try:
+            ret = cli.run(root, args, os.environ)
+        finally:
+            p.stdin.write(b'\n') # break out of readline()
+            p.stdin.close()
+            p.wait()
         return ret
 
 
     def serve_pipe(root, stdin, stdout):
         while not stdin.closed and not stdout.closed:
             line = stdin.readline().decode('ascii').strip()
-            if not line: continue # blank line means it's probably over
+            if not line: break # blank line means it's probably over
             size = int(line)
             buf = stdin.read(size)
             obj, _ = codec.parse(buf, 0)
 
-            if obj.action == "render":
-                response = root.render()
-            elif obj.action == "call":
-                response = root.call(obj.path, obj.argv)
+            try:
+                if obj.action == "render":
+                    response = root.render()
+                elif obj.action == "call":
+                    response = root.call(obj.path, obj.argv)
+            except:
+                stdout.write(b'\n')
+                raise
 
             buf = codec.dump(response, bytearray())
 
@@ -1013,6 +1021,6 @@ class cli:
 
 if __name__ == '__main__':
     argv = sys.argv[1:]
-    sys.exit(cli.run_pipe(argv))
+    sys.exit(cli.run_pipe_client(argv))
 
 
