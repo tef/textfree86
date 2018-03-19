@@ -1,10 +1,9 @@
 # TextFree86: Finally, a network transparent command line!
 
-This readme is not ready for an audience yet. I'd appreciate if you didn't link to it, thank you.
+TextFree86 is a framework for writing network-transparent command-line tools.
 
-TextFree86 is a framework for writing command-line tools in, for Python 3.6.
 
-What makes it unique is that that is offers some notion of network transparency, or in other words: where the command line is typed in, and where the program is run, aren't assumed to be the same place.
+*This readme is not ready for an audience yet. I'd appreciate if you didn't link to it, thank you*
 
 ## Network transparent means more than just SSH
 
@@ -114,6 +113,8 @@ cmd.main(__name__)
 ```
 
 ## How do I use the Library?
+
+Please note: Although TextFree86 implementation requires Python 3.6, the underlying protocol does not.
 
 ### An Example Program
 
