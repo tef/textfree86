@@ -826,7 +826,7 @@ class cli:
                     buf = io.BytesIO()
                     buf.write(value.buf)
                     buf.seek(0)
-                    return buf, True
+                    return buf, False
                 elif value.mode == "write":
                     buf = io.BytesIO()
                     out.append(buf)
@@ -834,6 +834,9 @@ class cli:
             return value, False
 
         def poll(self, client_file_handles=()):
+            return self.close()
+
+        def close(self):
             # copy input into input pipes
             # read output from output pipes, 
             # read result and store it if done
@@ -851,7 +854,6 @@ class cli:
 
             return wire.Response(0, result, file_handles=output_fhs)
 
-        def close(self):
             # clean up pipes/pid
             pass
 
@@ -913,6 +915,8 @@ class cli:
                 if obj.action == "render":
                     response = root.render()
                 elif obj.action == "call":
+                    # alternate take: create fork here, but then struggle
+                    # to pass streams? 
                     response = root.call(obj.path, obj.argv)
                     if isinstance(response,wire.Session):
                         sessions.append(response.idx)
@@ -920,11 +924,10 @@ class cli:
                 elif obj.action == "poll":
                     s = sessions[obj.path]
                     response = s.poll(obj.argv)
-                    if isinstance(response, wire.Session):
-                        response.idx = obj.path
-                    else:
-                        s.close()
+                    if isinstance(response, wire.Response):
                         sessions[obj.path] = None
+                    else:
+                        response = wire.Session(obj.path, new_s.file_handles)
             except:
                 stdout.write(b'\n')
                 raise
