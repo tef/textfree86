@@ -3,6 +3,7 @@
 import io
 import os
 import sys
+import time
 import types
 import itertools
 import subprocess
@@ -513,6 +514,11 @@ class codec:
 
 class wire:
     @codec.register()
+    class Session:
+        def __init__(self, idx, file_handles=()):
+            self.idx = idx
+            self.file_handles = file_handles
+
     class BadArg(Exception):
         def action(self, path):
             return cli.Action("error", path, {'usage':True}, errors=self.args)
@@ -755,7 +761,7 @@ class cli:
                 return self.subcommands[path[0]].call(path[1:], argv)
             elif self.run_fn:
                 if len(argv) == self.nargs:
-                    return self.invoke(argv)
+                    return cli.Session(self.run_fn, argv)
                 else:
                     return wire.Response(-1, "bad options")
             else:
@@ -764,7 +770,17 @@ class cli:
                 else:
                     return wire.Response(-1, self.render.usage())
 
-        def invoke(self, argv):
+        def __call__(self, **kwargs):
+            return self.run_fn(**args)
+
+        def main(self, name):
+            if name == '__main__':
+                cli.main(self)
+
+    #end Command
+
+    class Session():
+        def __init__(self, run_fn, argv):
             args = {}
             file_handles = {}
             for name, values in argv.items():
@@ -800,28 +816,26 @@ class cli:
                             file_handles[name] = [buf]
                     else:
                         args[name] = value
+            self.file_handles = file_handles
+            self.result = run_fn(**args)
 
-            result = self.run_fn(**args)
+
+        def poll(self, client_file_handles):
+            result = self.result
 
             if isinstance(result, types.GeneratorType):
                 result = list(result)
 
             output_fhs = {}
-            for name, fhs in file_handles.items():
+            for name, fhs in self.file_handles.items():
                 output_fhs[name] = []
                 for fh in fhs:
                     output_fhs[name].append(fh.getvalue())
 
             return wire.Response(0, result, file_handles=output_fhs)
 
-        def __call__(self, **kwargs):
-            return self.run_fn(**args)
-
-        def main(self, name):
-            if name == '__main__':
-                cli.main(self)
-
-    #end Command
+        def close(self):
+            pass
 
     def main(root):
         argv = sys.argv[1:]
@@ -869,6 +883,7 @@ class cli:
 
 
     def serve_pipe(root, stdin, stdout):
+        sessions = []
         while not stdin.closed and not stdout.closed:
             line = stdin.readline().decode('ascii').strip()
             if not line: break # blank line means it's probably over
@@ -881,6 +896,18 @@ class cli:
                     response = root.render()
                 elif obj.action == "call":
                     response = root.call(obj.path, obj.argv)
+                    response = response.poll({})
+                    if isinstance(response, cli.Session):
+                        sessions.append(response)
+                        response = wire.Session(len(sessions)-1)
+                elif obj.action == "poll":
+                    s = sessions[obj.path]
+                    response = s.poll(obj.argv)
+                    if isinstance(response, wire.Session):
+                        response.idx = obj.path
+                    else:
+                        s.close()
+                        sessions[obj.path] = None
             except:
                 stdout.write(b'\n')
                 raise
@@ -890,6 +917,8 @@ class cli:
             stdout.write(b"%d\n" % (len(buf)))
             stdout.write(buf)
             stdout.flush()
+        for s in sessions:
+            if s: s.close()
         return 0
 
     class PipeClient:
@@ -897,8 +926,8 @@ class cli:
             self.request = request 
             self.response = response
 
-        def render(self):
-            obj = wire.Request("render", None, None)
+        def send(self, name, path, argv):
+            obj = wire.Request(name, path, argv)
             buf = codec.dump(obj, bytearray())
             self.request.write(b"%d\n"%(len(buf)))
             self.request.write(buf)
@@ -909,15 +938,14 @@ class cli:
             return obj
 
         def call(self, path, argv):
-            obj = wire.Request("call", path, argv)
-            buf = codec.dump(obj, bytearray())
-            self.request.write(b"%d\n"%(len(buf)))
-            self.request.write(buf)
-            self.request.flush()
-            size = int(self.response.readline().strip())
-            buf = self.response.read(size)
-            obj, _ = codec.parse(buf, 0)
-            return obj
+            return self.send("call", path, argv)
+
+        def render(self):
+            return self.send("render", None, None)
+
+        def poll(self, idx, file_handles):
+            return self.send("poll", idx, file_handles)
+
 
     def run(root, argv, environ):
         obj = root.render()
@@ -985,6 +1013,9 @@ class cli:
                         argv[name] = value
 
             result =  root.call(action.path, argv)
+            while isinstance(result, wire.Session):
+                result = root.poll(result.idx, file_handles=())
+                time.sleep(0.300) 
 
             if file_handles and isinstance(result, wire.Response) and result.file_handles:
                 for name, fhs in file_handles.items():
