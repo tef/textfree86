@@ -44,7 +44,7 @@ TextFree86 does both of these for you.
 All TextFree86 programs can take input over a pipe, rather than as arguments, and comes with a `textfree86` tool to call it. 
 
 ```
-local.host$ alias remote-insert-into-database='textfree86 "ssh datatbase insert-into-database ---pipe"'
+local.host$ alias remote-insert-into-database='textfree86 "ssh database insert-into-database --pipe"'
 local.host$ remote-insert-into-database record.json    # use a local file, but running a remote command
 ```
 
