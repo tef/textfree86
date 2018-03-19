@@ -2,7 +2,7 @@
 
 *This readme is not ready for an audience yet. I'd appreciate if you didn't link to it, thank you*
 
-## Network transparent means more than just SSH
+### Network transparent means more than just SSH
 
 Take an imaginary CLI tool, that inserts some JSON into a database:
 
@@ -83,7 +83,7 @@ That's what 'network transparent' means, but TextFree86 is more than just runnin
 
 TextFree86 is about running remote or sandboxed programs, without having to use a different tool for each one.
 
-### A real example program:
+## A real example program:
 
 ```
 import subprocess
@@ -113,7 +113,7 @@ cmd.main(__name__)
 
 Please note: Although TextFree86 implementation requires Python 3.6, the underlying protocol does not.
 
-### An Example Program
+### Another Example Program
 
 A textfree86 program consists of `cli.Commands()`, chained together, used to decorate functions to dispatch:
 
