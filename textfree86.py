@@ -858,7 +858,7 @@ class cli:
         )
         root = cli.PipeClient(p.stdin, p.stdout)
         ret = cli.run(root, args, os.environ)
-        p.stdin.write(b'\n')
+        p.stdin.write(b'\n') # break out of readline()
         p.stdin.close()
         p.wait()
         return ret
@@ -867,7 +867,7 @@ class cli:
     def serve_pipe(root, stdin, stdout):
         while not stdin.closed and not stdout.closed:
             line = stdin.readline().decode('ascii').strip()
-            if not line: break
+            if not line: continue # blank line means it's probably over
             size = int(line)
             buf = stdin.read(size)
             obj, _ = codec.parse(buf, 0)
