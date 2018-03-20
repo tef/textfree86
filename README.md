@@ -121,7 +121,7 @@ A textfree86 program consists of `cli.Commands()`, chained together, used to dec
 cmd = cli.Command('florb','florb the morps')
 @cmd.run("one [two] [three...]")
 def cmd_run(one, two, three):
-    return [one, two, three]
+    print([one, two, three])
 ```
 
 gives this output:
@@ -233,7 +233,7 @@ def subcommand_run(data, output):
 
 ### Stdout/Stderr
 
-Output from stdout/stderr, or from calls to `print()` are forwarded to the client. The client prints it to stderr.
+Output from stdout/stderr, or from calls to `print()` are forwarded to the client. The client prints it to stderr locally.
 
 ### Stretch Goals: Environment Variables, Paths, Config Files
 

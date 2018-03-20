@@ -822,6 +822,8 @@ class cli:
             os.set_blocking(console_r, False)
             os.set_blocking(console_w, False)
 
+            os.set_blocking(result_r, False)
+            os.set_blocking(result_w, False)
             pid = os.fork()
             if pid == 0:
                 os.dup2(console_w, sys.stdout.fileno())
@@ -840,7 +842,7 @@ class cli:
                         pipe.write(buf)
                         pipe.flush()
                 finally:
-                    pipe.write(b'\n')
+                    pipe.write(b'-1\n')
                     pipe.close()
                     sys.stdout.flush()
                     sys.stderr.flush()
@@ -855,11 +857,14 @@ class cli:
                 def reader():
                     while not pipe.closed:
                         line = pipe.readline().decode('ascii').strip()
-                        if not line: break # blank line means it's probably over
-                        size = int(line)
-                        buf = pipe.read(size)
-                        obj, _ = codec.parse(buf, 0)
-                        yield obj
+                        if not line:  # blank line means it's probably over
+                            yield
+                        else:
+                            size = int(line)
+                            buf = pipe.read(size)
+                            if size < 0: break
+                            obj, _ = codec.parse(buf, 0)
+                            yield obj
 
                 self.reader = reader()
 
@@ -915,7 +920,7 @@ class cli:
             else:
                 cmd = cli.PipeClient(os.fdopen(input_w, 'wb'), os.fdopen(output_r, 'rb'))
                 code = cli.run(cmd, argv, environ)
-                os.write(input_w, b'\n')
+                os.write(input_w, b'-1\n')
                 sys.exit(code)
 
     def run_pipe_client(args):
@@ -935,7 +940,7 @@ class cli:
         try:
             ret = cli.run(root, args, os.environ)
         finally:
-            p.stdin.write(b'\n') # break out of readline()
+            p.stdin.write(b'-1\n') # break out of readline()
             p.stdin.close()
             p.wait()
         return ret
@@ -945,8 +950,9 @@ class cli:
         sessions = []
         while not stdin.closed and not stdout.closed:
             line = stdin.readline().decode('ascii').strip()
-            if not line: break # blank line means it's probably over
+            if not line: continue # blank line means it's probably over
             size = int(line)
+            if size < 0: break
             buf = stdin.read(size)
             obj, _ = codec.parse(buf, 0)
 
