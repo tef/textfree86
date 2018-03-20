@@ -915,22 +915,28 @@ class cli:
             pass
 
         def poll(self, client_file_handles=()):
+            output_fhs = {}
             out = self.console.read()
             if out:
-                return wire.Session(self, None, {'console': out})
+                output_fhs['console'] = out
+            for name, fhs in self.file_handles.items():
+                output = []
+                for fh in fhs:
+                    output.append(fh.read())
+                if any(output):
+                    output_fhs[name] = output
+
+            if output_fhs:
+                return wire.Session(self, None, output_fhs)
             try:
                 value = next(self.reader)
                 return wire.Session(self, value, {})
             except (GeneratorExit, StopIteration):
                 os.wait()
-                last = bytearray()
-                while out != b'':
-                    last.extend(out)
-                    out = self.console.read()
-
                 output_fhs = {}
-                if last:
-                    output_fhs['console'] = last
+                out = self.console.read()
+                if out:
+                    output_fhs['console'] = out
                 for name, fhs in self.file_handles.items():
                     output_fhs[name] = []
                     for fh in fhs:
@@ -1161,6 +1167,12 @@ class cli:
                 line = result.file_handles['console']
                 sys.stderr.buffer.write(line)
                 sys.stderr.buffer.flush()
+            if file_handles and result.file_handles:
+                for name, fhs in file_handles.items():
+                    if name not in result.file_handles:
+                        continue
+                    for idx, fh in enumerate(fhs):
+                        fh.write(result.file_handles[name][idx])
             if result.value is not None:
                 r = result.value
                 if isinstance(r, (bytes, bytearray)):
