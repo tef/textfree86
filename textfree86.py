@@ -817,8 +817,15 @@ class cli:
             self.file_handles = file_handles
 
             result_r, result_w = os.pipe()
+            console_r, console_w = os.pipe()
+
+            os.set_blocking(console_r, False)
+
             pid = os.fork()
             if pid == 0:
+                os.dup2(console_w, sys.stdout.fileno())
+                os.dup2(console_w, sys.stderr.fileno())
+                sys.stdin.close()
                 pipe = os.fdopen(result_w, 'wb')
                 try:
                     result = self.run_fn(**args)
@@ -831,9 +838,13 @@ class cli:
                         pipe.flush()
                 finally:
                     pipe.write(b'\n')
+                    pipe.close()
+                    os.close(console_w)
                 sys.exit(0)
             else:
                 pipe = os.fdopen(result_r, 'rb')
+                self.console = os.fdopen(console_r, 'rb')
+
                 def reader():
                     while not pipe.closed:
                         line = pipe.readline().decode('ascii').strip()
@@ -844,7 +855,6 @@ class cli:
                         yield obj
 
                 self.reader = reader()
-                self.output = []
 
         def create_fh(self, value):
             if isinstance(value, wire.FileHandle):
@@ -860,14 +870,16 @@ class cli:
             return value, False
 
         def poll(self, client_file_handles=()):
+            console = self.console.read() if not self.console.closed else None
             try:
                 value = next(self.reader)
-                return wire.Session(self, value)
+                return wire.Session(self, value, {'console':console})
             except (GeneratorExit, StopIteration):
                 return self.close()
 
         def close(self):
-            output_fhs = {}
+            console = self.console.read() if not self.console.closed else None
+            output_fhs = {'console': console}
             for name, fhs in self.file_handles.items():
                 output_fhs[name] = []
                 for fh in fhs:
@@ -878,17 +890,23 @@ class cli:
     def main(root):
         argv = sys.argv[1:]
         environ = os.environ
+        force_local = False # 'COMP_LINE' in environ and 'COMP_POINT' in environ
         if argv == ["--pipe"]:
-            sys.exit(cli.serve_pipe(root, sys.stdin.buffer, sys.stdout.buffer))
+            stdin = os.fdopen(os.dup(sys.stdin.fileno()),'rb')
+            stdout = os.fdopen(os.dup(sys.stdout.fileno()),'wb')
+            os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+
+            sys.exit(cli.serve_pipe(root, stdin, stdout))
         elif argv and argv[0] == "--run":
             sys.exit(cli.run_pipe_client(argv[1:]))
-        elif True or False: # 'COMP_LINE' in environ and 'COMP_POINT' in environ:
+        elif force_local: 
             code = cli.run(root, argv, environ)
         else:
             input_r, input_w = os.pipe()
             output_r, output_w = os.pipe()
             pid = os.fork()
             if pid == 0: # child
+                os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
                 code = (cli.serve_pipe(root, os.fdopen(input_r, 'rb'), os.fdopen(output_w, 'wb')))
                 sys.exit(code)
             else:
@@ -1024,6 +1042,9 @@ class cli:
                 result = obj.help(action.path, usage=action.argv.get('usage'))
 
             if isinstance(result, wire.Response):
+                if 'console' in result.file_handles and result.file_handles['console']:
+                    sys.stderr.buffer.write(result.file_handles['console'])
+                    sys.stderr.buffer.flush()
                 exit_code = result.exit_code
                 result = result.value
             else:
@@ -1082,6 +1103,9 @@ class cli:
         result =  root.call(action.path, argv)
 
         while isinstance(result, wire.Session):
+            if 'console' in result.file_handles and result.file_handles['console']:
+                sys.stderr.buffer.write(result.file_handles['console'])
+                sys.stderr.buffer.flush()
             if result.value:
                 r = result.value
                 if isinstance(r, (bytes, bytearray)):
@@ -1092,6 +1116,10 @@ class cli:
             result = root.poll(result.idx, file_handles=())
             time.sleep(0.300) 
 
+        if 'stdout' in result.file_handles and result.file_handles['stdout']:
+            if 'console' in result.file_handles and result.file_handles['console']:
+                sys.stderr.buffer.write(result.file_handles['console'])
+                sys.stderr.buffer.flush()
 
         if file_handles and isinstance(result, wire.Response) and result.file_handles:
             for name, fhs in file_handles.items():
