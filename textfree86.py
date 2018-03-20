@@ -792,13 +792,13 @@ class cli:
         def __init__(self):
             self.r, self.w = os.pipe()
 
-        def byte_reader(self):
-            os.close(self.w)
+        def byte_reader(self, close_other=True):
+            if close_other: os.close(self.w)
             os.set_blocking(self.r, False)
             return  os.fdopen(self.r, 'rb')
 
-        def byte_writer(self):
-            os.close(self.r)
+        def byte_writer(self, close_other=True):
+            if close_other: os.close(self.r)
             return os.fdopen(self.w, 'wb')
 
 
@@ -855,8 +855,8 @@ class cli:
                         value, pipe = self.create_fh(value)
                         if pipe:
                             if name not in file_handles: file_handles[name] = []
-                            file_handles[name].append(os.fdopen(value[0], 'rb'))
-                            out.append(os.fdopen(value[1], 'wb'))
+                            file_handles[name].append(value.byte_reader(close_other=False))
+                            out.append(value.byte_writer(close_other=False))
                         else:
                             out.append(value)
                     args[name] = out
@@ -864,8 +864,8 @@ class cli:
                 else:
                     value, pipe = self.create_fh(values)
                     if pipe:
-                        file_handles[name] = [os.fdopen(value[0], 'rb')]
-                        args[name] = os.fdopen(value[1], 'wb')
+                        file_handles[name] = [value.byte_reader(close_other=False)]
+                        args[name] = value.byte_writer(close_other=False)
                     else:
                         args[name] = value
 
@@ -908,7 +908,7 @@ class cli:
                     buf.seek(0)
                     return buf, False
                 elif value.mode == "write":
-                    return os.pipe(), True
+                    return cli.Pipe(), True
             return value, False
 
         def close(self):
@@ -991,9 +991,10 @@ class cli:
 
     def serve_pipe(root, stdin, stdout):
         sessions = []
-        while not stdin.closed and not stdout.closed:
+        while True:
             line = stdin.readline().decode('ascii').strip()
-            if not line: continue # blank line means it's probably over
+            if not line: 
+                break # blank line means it's probably over
             size = int(line)
             if size < 0: break
             buf = stdin.read(size)
