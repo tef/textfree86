@@ -836,9 +836,15 @@ class cli:
                         pipe.write(b"%d\n" % (len(buf)))
                         pipe.write(buf)
                         pipe.flush()
+                        sys.stderr.flush()
+                        sys.stdout.flush()
                 finally:
                     pipe.write(b'\n')
                     pipe.close()
+                    sys.stdout.flush()
+                    sys.stderr.flush()
+                    sys.stdout.close()
+                    sys.stderr.close()
                     os.close(console_w)
                 sys.exit(0)
             else:
@@ -878,7 +884,7 @@ class cli:
                 return self.close()
 
         def close(self):
-            console = self.console.read() if not self.console.closed else None
+            console = self.console.read() #if not self.console.closed else None
             output_fhs = {'console': console}
             for name, fhs in self.file_handles.items():
                 output_fhs[name] = []
@@ -1116,7 +1122,7 @@ class cli:
             result = root.poll(result.idx, file_handles=())
             time.sleep(0.300) 
 
-        if 'stdout' in result.file_handles and result.file_handles['stdout']:
+        if 'console' in result.file_handles and result.file_handles['console']:
             if 'console' in result.file_handles and result.file_handles['console']:
                 sys.stderr.buffer.write(result.file_handles['console'])
                 sys.stderr.buffer.flush()

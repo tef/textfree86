@@ -231,6 +231,10 @@ def subcommand_run(data, output):
         output.write(line)
 ```
 
+### Stdout/Stderr
+
+Output from stdout/stderr, or from calls to `print()` are forwarded to the client. The client prints it to stderr.
+
 ### Stretch Goals: Environment Variables, Paths, Config Files
 
 Maybe `cmd subcommand --foo='...'` could use `foo:env` as the argspec to  from `CMD_SUBCOMMAND_FOO` or `--env=<...>` on the command line. Similarly, types for directories, or config files.
