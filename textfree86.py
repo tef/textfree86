@@ -882,7 +882,7 @@ class cli:
             return value, False
 
         def poll(self, client_file_handles=()):
-            out = None # self.console.read()
+            out = self.poll_count() # None # self.console.read()
             try:
                 value = next(self.reader)
                 return wire.Session(self, value, {'console':out})
