@@ -788,6 +788,47 @@ class cli:
 
     #end Command
 
+    class Pipe:
+        def __init__(self):
+            self.r, self.w = os.pipe()
+
+        def obj_reader(self):
+            os.close(self.w)
+            fcntl.fcntl(self.r, fcntl.F_SETFL, os.O_NONBLOCK)
+            pipe = os.fdopen(self.w, 'wb')
+            def reader():
+                while True:
+                    line = pipe.readline().decode('ascii').strip()
+                    if not line:  # blank line means it's probably over
+                        yield
+                    else:
+                        size = int(line)
+                        buf = pipe.read(size)
+                        if size < 0: break
+                        obj, _ = codec.parse(buf, 0)
+                        yield obj
+                pipe.close()
+            return reader()
+
+
+        def obj_writer(self):
+            os.close(self.r)
+
+            def writer(self, obj, end=False):
+                if end:
+                    pipe.write(b"-1\n")
+                else:
+                    buf = codec.dump(obj, bytearray())
+                    pipe.write(b"%d\n" % (len(buf)))
+                    pipe.write(buf)
+                    pipe.flush()
+
+            return writer
+
+    def is_closed(fh):
+        fd = fh.fileno()
+        
+
     class Session():
         def __init__(self, run_fn, argv):
             self.run_fn = run_fn
@@ -833,6 +874,8 @@ class cli:
                 os.dup2(console_w, sys.stdout.fileno())
                 os.dup2(console_w, sys.stderr.fileno())
                 sys.stdin.close()
+                os.close(console_r)
+                os.close(result_r)
                 # ugh writefile breaks 
                 pipe = os.fdopen(result_w, 'wb')
                 try:
@@ -842,6 +885,8 @@ class cli:
                     if not isinstance(result, types.GeneratorType):
                         result = [result]
                     for r in result:
+                        # sys.stderr.buffer.write("writing: {}\n".format(r).encode('ascii'))
+                        # sys.stderr.buffer.flush()
                         buf = codec.dump(r, bytearray())
                         pipe.write(b"%d\n" % (len(buf)))
                         pipe.write(buf)
@@ -856,6 +901,9 @@ class cli:
                     os.close(console_w)
                 sys.exit(0)
             else:
+                self.pid = pid
+                os.close(console_w)
+                os.close(result_w)
                 pipe = os.fdopen(result_r, 'rb')
                 self.console = os.fdopen(console_r, 'rb')
 
@@ -869,6 +917,7 @@ class cli:
                             buf = pipe.read(size)
                             if size < 0: break
                             obj, _ = codec.parse(buf, 0)
+                            # print('yield', obj, file=sys.stderr)
                             yield obj
 
                 self.reader = reader()
@@ -884,13 +933,19 @@ class cli:
                     return os.pipe(), True
             return value, False
 
+        def close(self):
+            pass
+
         def poll(self, client_file_handles=()):
             out = self.console.read()
+            if out:
+                return wire.Session(self, None, {'console': out})
             try:
                 value = next(self.reader)
-                return wire.Session(self, value, {'console':out})
+                return wire.Session(self, value, {})
             except (GeneratorExit, StopIteration):
-                output_fhs = {'console': out}
+                os.wait()
+                output_fhs = {}
                 for name, fhs in self.file_handles.items():
                     output_fhs[name] = []
                     for fh in fhs:
@@ -1120,7 +1175,7 @@ class cli:
                 line = result.file_handles['console']
                 sys.stderr.buffer.write(line)
                 sys.stderr.buffer.flush()
-            if result.value:
+            if result.value is not None:
                 r = result.value
                 if isinstance(r, (bytes, bytearray)):
                     sys.stdout.buffer.write(r)
