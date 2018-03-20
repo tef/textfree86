@@ -792,6 +792,11 @@ class cli:
         def __init__(self, run_fn, argv):
             self.run_fn = run_fn
             self.argv = argv
+            self.count = 0
+            
+        def pollcount(self):
+            self.count +=1
+            return b"%d\n""%self.count
 
 
         def fork(self):
@@ -820,6 +825,7 @@ class cli:
             console_r, console_w = os.pipe()
 
             os.set_blocking(console_r, False)
+            os.set_blocking(console_w, False)
 
             pid = os.fork()
             if pid == 0:
@@ -829,6 +835,8 @@ class cli:
                 pipe = os.fdopen(result_w, 'wb')
                 try:
                     result = self.run_fn(**args)
+                    sys.stderr.flush()
+                    sys.stdout.flush()
                     if not isinstance(result, types.GeneratorType):
                         result = [result]
                     for r in result:
@@ -836,15 +844,13 @@ class cli:
                         pipe.write(b"%d\n" % (len(buf)))
                         pipe.write(buf)
                         pipe.flush()
-                        sys.stderr.flush()
-                        sys.stdout.flush()
                 finally:
                     pipe.write(b'\n')
                     pipe.close()
                     sys.stdout.flush()
                     sys.stderr.flush()
-                    sys.stdout.close()
-                    sys.stderr.close()
+                    os.close(sys.stdout.fileno())
+                    os.close(sys.stderr.fileno())
                     os.close(console_w)
                 sys.exit(0)
             else:
@@ -876,16 +882,16 @@ class cli:
             return value, False
 
         def poll(self, client_file_handles=()):
-            console = self.console.read() if not self.console.closed else None
+            out = None # self.console.read()
             try:
                 value = next(self.reader)
-                return wire.Session(self, value, {'console':console})
+                return wire.Session(self, value, {'console':out})
             except (GeneratorExit, StopIteration):
                 return self.close()
 
         def close(self):
-            console = self.console.read() #if not self.console.closed else None
-            output_fhs = {'console': console}
+            out = self.console.read()
+            output_fhs = {'console': out}
             for name, fhs in self.file_handles.items():
                 output_fhs[name] = []
                 for fh in fhs:
@@ -962,7 +968,7 @@ class cli:
                     response = root.call(obj.path, obj.argv)
                     if isinstance(response,wire.Session):
                         sessions.append(response.idx)
-                        response = wire.Session(len(sessions)-1, response.value)
+                        response = wire.Session(len(sessions)-1, response.value, response.file_handles)
                 elif obj.action == "poll":
                     s = sessions[obj.path]
                     response = s.poll(obj.argv)
@@ -1049,7 +1055,8 @@ class cli:
 
             if isinstance(result, wire.Response):
                 if 'console' in result.file_handles and result.file_handles['console']:
-                    sys.stderr.buffer.write(result.file_handles['console'])
+                    line = result.file_handles['console']
+                    sys.stderr.buffer.write(line)
                     sys.stderr.buffer.flush()
                 exit_code = result.exit_code
                 result = result.value
@@ -1110,7 +1117,8 @@ class cli:
 
         while isinstance(result, wire.Session):
             if 'console' in result.file_handles and result.file_handles['console']:
-                sys.stderr.buffer.write(result.file_handles['console'])
+                line = result.file_handles['console']
+                sys.stderr.buffer.write(line)
                 sys.stderr.buffer.flush()
             if result.value:
                 r = result.value
@@ -1123,9 +1131,9 @@ class cli:
             time.sleep(0.300) 
 
         if 'console' in result.file_handles and result.file_handles['console']:
-            if 'console' in result.file_handles and result.file_handles['console']:
-                sys.stderr.buffer.write(result.file_handles['console'])
-                sys.stderr.buffer.flush()
+            line = result.file_handles['console']
+            sys.stderr.buffer.write(line)
+            sys.stderr.buffer.flush()
 
         if file_handles and isinstance(result, wire.Response) and result.file_handles:
             for name, fhs in file_handles.items():
