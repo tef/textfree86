@@ -801,18 +801,22 @@ class cli:
                 if isinstance(values, list):
                     out = []
                     for value in values:
-                        value, wrapped = self.create_fh(value)
-                        if wrapped:
+                        value, pipe = self.create_fh(value)
+                        if pipe:
                             if name not in file_handles: file_handles[name] = []
-                            file_handles[name].append(value)
-                        out.append(value)
+                            file_handles[name].append(os.fdopen(value[0], 'rb'))
+                            out.append(os.fdopen(value[1], 'wb'))
+                        else:
+                            out.append(value)
                     args[name] = out
                 
                 else:
-                    value, wrapped = self.create_fh(values)
-                    if wrapped:
-                        file_handles[name] = [value]
-                    args[name] = value
+                    value, pipe = self.create_fh(values)
+                    if pipe:
+                        file_handles[name] = [os.fdopen(value[0], 'rb')]
+                        args[name] = os.fdopen(value[1], 'wb')
+                    else:
+                        args[name] = value
 
             self.file_handles = file_handles
 
@@ -829,6 +833,7 @@ class cli:
                 os.dup2(console_w, sys.stdout.fileno())
                 os.dup2(console_w, sys.stderr.fileno())
                 sys.stdin.close()
+                # ugh writefile breaks 
                 pipe = os.fdopen(result_w, 'wb')
                 try:
                     result = self.run_fn(**args)
@@ -876,9 +881,7 @@ class cli:
                     buf.seek(0)
                     return buf, False
                 elif value.mode == "write":
-                    buf = io.BytesIO()
-                    out.append(buf)
-                    return buf, True
+                    return os.pipe(), True
             return value, False
 
         def poll(self, client_file_handles=()):
@@ -891,7 +894,7 @@ class cli:
                 for name, fhs in self.file_handles.items():
                     output_fhs[name] = []
                     for fh in fhs:
-                        output_fhs[name].append(fh.getvalue())
+                        output_fhs[name].append(fh.read())
 
                 return wire.Response(0, None, file_handles=output_fhs)
 
