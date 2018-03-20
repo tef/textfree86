@@ -515,8 +515,9 @@ class codec:
 class wire:
     @codec.register()
     class Session:
-        def __init__(self, idx, file_handles=()):
+        def __init__(self, idx, value, file_handles=()):
             self.idx = idx
+            self.value = value
             self.file_handles = file_handles
 
     class BadArg(Exception):
@@ -761,7 +762,7 @@ class cli:
                 return self.subcommands[path[0]].call(path[1:], argv)
             elif self.run_fn:
                 if len(argv) == self.nargs:
-                    return wire.Session(self.spawn(argv))
+                    return wire.Session(self.spawn(argv), None)
                 else:
                     return wire.Response(-1, "bad options")
             else:
@@ -811,6 +812,7 @@ class cli:
                     value, wrapped = self.create_fh(values)
                     if wrapped:
                         file_handles[name] = [value]
+                    args[name] = value
 
             self.file_handles = file_handles
 
@@ -818,16 +820,17 @@ class cli:
             pid = os.fork()
             if pid == 0:
                 pipe = os.fdopen(result_w, 'wb')
-                result = self.run_fn(**args)
-                if not isinstance(result, types.GeneratorType):
-                    result = [result]
-                for r in result:
-                    buf = codec.dump(r, bytearray())
-                    pipe.write(b"%d\n" % (len(buf)))
-                    pipe.write(buf)
-                    pipe.flush()
-
-                pipe.write(b'\n')
+                try:
+                    result = self.run_fn(**args)
+                    if not isinstance(result, types.GeneratorType):
+                        result = [result]
+                    for r in result:
+                        buf = codec.dump(r, bytearray())
+                        pipe.write(b"%d\n" % (len(buf)))
+                        pipe.write(buf)
+                        pipe.flush()
+                finally:
+                    pipe.write(b'\n')
                 sys.exit(0)
             else:
                 pipe = os.fdopen(result_r, 'rb')
@@ -859,8 +862,7 @@ class cli:
         def poll(self, client_file_handles=()):
             try:
                 value = next(self.reader)
-                self.output.append(value)
-                return wire.Session(self)
+                return wire.Session(self, value)
             except (GeneratorExit, StopIteration):
                 return self.close()
 
@@ -871,7 +873,7 @@ class cli:
                 for fh in fhs:
                     output_fhs[name].append(fh.getvalue())
 
-            return wire.Response(0, self.output, file_handles=output_fhs)
+            return wire.Response(0, None, file_handles=output_fhs)
 
     def main(root):
         argv = sys.argv[1:]
@@ -936,14 +938,14 @@ class cli:
                     response = root.call(obj.path, obj.argv)
                     if isinstance(response,wire.Session):
                         sessions.append(response.idx)
-                        response = wire.Session(len(sessions)-1)
+                        response = wire.Session(len(sessions)-1, response.value)
                 elif obj.action == "poll":
                     s = sessions[obj.path]
                     response = s.poll(obj.argv)
                     if isinstance(response, wire.Response):
                         sessions[obj.path] = None
                     else:
-                        response = wire.Session(obj.path, response.file_handles)
+                        response = wire.Session(obj.path, response.value, response.file_handles)
             except Exception as e:
                 stdout.write(b'error: ')
                 stdout.write(str(e).encode('ascii'))
@@ -1012,69 +1014,94 @@ class cli:
             for line in result:
                 print(line)
             return 0
-        elif action.mode == "call":
-            file_handles = {}
-            argv = {}
-            for name, values in action.argv.items():
-                if isinstance(values, list):
-                    out = []
-                    for value in values:
-                        if isinstance(value, wire.FileHandle):
-                            if value.mode == "read":
-                                with open(value.name, "rb") as fh:
-                                    buf = fh.read()
-                                out.append(wire.FileHandle(value.name, "read", buf=buf))
-                            elif value.mode == "write":
-                                fh = open(value.name, "xb")
-                                if name not in file_handles:
-                                    file_handles[name] = []
-                                file_handles[name].append(fh)
-                                out.append(value)
-                        else:
-                            out.append(value)
-                    argv[name] = out
+        elif action.mode != "call":
+            if action.mode == "version":
+                result = obj.version()
+            if action.mode == "help":
+                result = obj.help(action.path, usage=action.argv.get('usage'))
+            if action.mode == "error":
+                print("error: {}".format(", ".join(action.errors)))
+                result = obj.help(action.path, usage=action.argv.get('usage'))
+
+            if isinstance(result, wire.Response):
+                exit_code = result.exit_code
+                result = result.value
+            else:
+                exit_code = -len(action.errors)
+
+            if result is not None:
+                if isinstance(result, (bytes, bytearray)):
+                    sys.stdout.buffer.write(result)
                 else:
-                    value = values
+                    print(result)
+                sys.stdout.flush()
+
+            return exit_code
+
+
+        if action.mode != "call":
+            raise Exception('no')
+
+        file_handles = {}
+        argv = {}
+
+        for name, values in action.argv.items():
+            if isinstance(values, list):
+                out = []
+                for value in values:
                     if isinstance(value, wire.FileHandle):
                         if value.mode == "read":
                             with open(value.name, "rb") as fh:
                                 buf = fh.read()
-                            argv[name] = wire.FileHandle(value.name, "read", buf=buf)
+                            out.append(wire.FileHandle(value.name, "read", buf=buf))
                         elif value.mode == "write":
                             fh = open(value.name, "xb")
                             if name not in file_handles:
                                 file_handles[name] = []
                             file_handles[name].append(fh)
-                            argv[name] = value
+                            out.append(value)
                     else:
+                        out.append(value)
+                argv[name] = out
+            else:
+                value = values
+                if isinstance(value, wire.FileHandle):
+                    if value.mode == "read":
+                        with open(value.name, "rb") as fh:
+                            buf = fh.read()
+                        argv[name] = wire.FileHandle(value.name, "read", buf=buf)
+                    elif value.mode == "write":
+                        fh = open(value.name, "xb")
+                        if name not in file_handles:
+                            file_handles[name] = []
+                        file_handles[name].append(fh)
                         argv[name] = value
+                else:
+                    argv[name] = value
 
-            result =  root.call(action.path, argv)
-            while isinstance(result, wire.Session):
-                result = root.poll(result.idx, file_handles=())
-                time.sleep(0.300) 
+        result =  root.call(action.path, argv)
 
-            # if argv contains 'stdout' then write function results to stderr
-            #  else write then to stdout.   maybe argspec of %stdout (like env var...)
+        while isinstance(result, wire.Session):
+            if result.value:
+                r = result.value
+                if isinstance(r, (bytes, bytearray)):
+                    sys.stdout.buffer.write(r)
+                else:
+                    print(r)
+                sys.stdout.flush()
+            result = root.poll(result.idx, file_handles=())
+            time.sleep(0.300) 
 
-            if file_handles and isinstance(result, wire.Response) and result.file_handles:
-                for name, fhs in file_handles.items():
-                    for idx, fh in enumerate(fhs):
-                        fh.write(result.file_handles[name][idx])
-                        fh.close()
-            elif file_handles:
-                for name, fhs in file_handles.items():
-                    for fh in fhs:
-                        fh.close()
 
-        elif action.mode == "version":
-            result = obj.version()
-        elif action.mode == "help":
-            result = obj.help(action.path, usage=action.argv.get('usage'))
-        elif action.mode == "error":
-            print("error: {}".format(", ".join(action.errors)))
-            result = obj.help(action.path, usage=action.argv.get('usage'))
-
+        if file_handles and isinstance(result, wire.Response) and result.file_handles:
+            for name, fhs in file_handles.items():
+                for idx, fh in enumerate(fhs):
+                    fh.write(result.file_handles[name][idx])
+                    fh.close()
+        elif file_handles:
+            for name, fhs in file_handles.items():
+                for fh in fhs:
+                    fh.close()
         if isinstance(result, wire.Response):
             exit_code = result.exit_code
             result = result.value
@@ -1090,6 +1117,7 @@ class cli:
                 sys.stdout.flush()
 
         return exit_code
+
 
 if __name__ == '__main__':
     argv = sys.argv[1:]
