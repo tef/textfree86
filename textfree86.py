@@ -813,12 +813,35 @@ class cli:
                         file_handles[name] = [value]
 
             self.file_handles = file_handles
-            # spawn pipes for any streams, and wrap them in fdopen
-            # store them in self.pipes
-            # fork, dup over std* and run function
-            self.result = self.run_fn(**args)
-            #  in child, write output to result pipe
-            # else store pid
+
+            result_r, result_w = os.pipe()
+            pid = os.fork()
+            if pid == 0:
+                pipe = os.fdopen(result_w, 'wb')
+                result = self.run_fn(**args)
+                if not isinstance(result, types.GeneratorType):
+                    result = [result]
+                for r in result:
+                    buf = codec.dump(r, bytearray())
+                    pipe.write(b"%d\n" % (len(buf)))
+                    pipe.write(buf)
+                    pipe.flush()
+
+                pipe.write(b'\n')
+                sys.exit(0)
+            else:
+                pipe = os.fdopen(result_r, 'rb')
+                def reader():
+                    while not pipe.closed:
+                        line = pipe.readline().decode('ascii').strip()
+                        if not line: break # blank line means it's probably over
+                        size = int(line)
+                        buf = pipe.read(size)
+                        obj, _ = codec.parse(buf, 0)
+                        yield obj
+
+                self.reader = reader()
+                self.output = []
 
         def create_fh(self, value):
             if isinstance(value, wire.FileHandle):
@@ -834,28 +857,21 @@ class cli:
             return value, False
 
         def poll(self, client_file_handles=()):
-            return self.close()
+            try:
+                value = next(self.reader)
+                self.output.append(value)
+                return wire.Session(self)
+            except (GeneratorExit, StopIteration):
+                return self.close()
 
         def close(self):
-            # copy input into input pipes
-            # read output from output pipes, 
-            # read result and store it if done
-            # if no session data to return, return the result
-            result = self.result
-
-            if isinstance(result, types.GeneratorType):
-                result = list(result)
-
             output_fhs = {}
             for name, fhs in self.file_handles.items():
                 output_fhs[name] = []
                 for fh in fhs:
                     output_fhs[name].append(fh.getvalue())
 
-            return wire.Response(0, result, file_handles=output_fhs)
-
-            # clean up pipes/pid
-            pass
+            return wire.Response(0, self.output, file_handles=output_fhs)
 
     def main(root):
         argv = sys.argv[1:]
@@ -927,9 +943,10 @@ class cli:
                     if isinstance(response, wire.Response):
                         sessions[obj.path] = None
                     else:
-                        response = wire.Session(obj.path, new_s.file_handles)
-            except:
-                stdout.write(b'\n')
+                        response = wire.Session(obj.path, response.file_handles)
+            except Exception as e:
+                stdout.write(b'error: ')
+                stdout.write(str(e).encode('ascii'))
                 raise
 
             buf = codec.dump(response, bytearray())
@@ -1037,6 +1054,9 @@ class cli:
                 result = root.poll(result.idx, file_handles=())
                 time.sleep(0.300) 
 
+            # if argv contains 'stdout' then write function results to stderr
+            #  else write then to stdout.   maybe argspec of %stdout (like env var...)
+
             if file_handles and isinstance(result, wire.Response) and result.file_handles:
                 for name, fhs in file_handles.items():
                     for idx, fh in enumerate(fhs):
@@ -1062,11 +1082,12 @@ class cli:
             exit_code = -len(action.errors)
 
         if result is not None:
-            if isinstance(result, (bytes, bytearray)):
-                sys.stdout.buffer.write(result)
-            else:
-                print(result)
-            sys.stdout.flush()
+            for r in result:
+                if isinstance(r, (bytes, bytearray)):
+                    sys.stdout.buffer.write(r)
+                else:
+                    print(r)
+                sys.stdout.flush()
 
         return exit_code
 
