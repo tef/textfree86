@@ -515,7 +515,7 @@ class codec:
 class wire:
     @codec.register()
     class Session:
-        def __init__(self, idx, value, file_handles=()):
+        def __init__(self, idx, value, file_handles):
             self.idx = idx
             self.value = value
             self.file_handles = file_handles
@@ -762,7 +762,7 @@ class cli:
                 return self.subcommands[path[0]].call(path[1:], argv)
             elif self.run_fn:
                 if len(argv) == self.nargs:
-                    return wire.Session(self.spawn(argv), None)
+                    return wire.Session(self.spawn(argv), None, {})
                 else:
                     return wire.Response(-1, "bad options")
             else:
@@ -793,11 +793,6 @@ class cli:
             self.run_fn = run_fn
             self.argv = argv
             self.count = 0
-            
-        def pollcount(self):
-            self.count +=1
-            return b"%d\n""%self.count
-
 
         def fork(self):
             args = {}
@@ -882,22 +877,18 @@ class cli:
             return value, False
 
         def poll(self, client_file_handles=()):
-            out = self.poll_count() # None # self.console.read()
+            out = self.console.read()
             try:
                 value = next(self.reader)
                 return wire.Session(self, value, {'console':out})
             except (GeneratorExit, StopIteration):
-                return self.close()
+                output_fhs = {'console': out}
+                for name, fhs in self.file_handles.items():
+                    output_fhs[name] = []
+                    for fh in fhs:
+                        output_fhs[name].append(fh.getvalue())
 
-        def close(self):
-            out = self.console.read()
-            output_fhs = {'console': out}
-            for name, fhs in self.file_handles.items():
-                output_fhs[name] = []
-                for fh in fhs:
-                    output_fhs[name].append(fh.getvalue())
-
-            return wire.Response(0, None, file_handles=output_fhs)
+                return wire.Response(0, None, file_handles=output_fhs)
 
     def main(root):
         argv = sys.argv[1:]
