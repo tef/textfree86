@@ -792,10 +792,21 @@ class cli:
         def __init__(self):
             self.r, self.w = os.pipe()
 
+        def byte_reader(self):
+            os.close(self.w)
+            os.set_blocking(self.r, False)
+            return  os.fdopen(self.r, 'rb')
+
+        def byte_writer(self):
+            os.close(self.r)
+            return os.fdopen(self.w, 'wb')
+
+
+
         def obj_reader(self):
             os.close(self.w)
-            fcntl.fcntl(self.r, fcntl.F_SETFL, os.O_NONBLOCK)
-            pipe = os.fdopen(self.w, 'wb')
+            os.set_blocking(self.r, False)
+            pipe = os.fdopen(self.r, 'rb')
             def reader():
                 while True:
                     line = pipe.readline().decode('ascii').strip()
@@ -813,10 +824,12 @@ class cli:
 
         def obj_writer(self):
             os.close(self.r)
+            pipe = os.fdopen(self.w, 'wb')
 
-            def writer(self, obj, end=False):
+            def writer(obj=None, end=False):
                 if end:
                     pipe.write(b"-1\n")
+                    pipe.close()
                 else:
                     buf = codec.dump(obj, bytearray())
                     pipe.write(b"%d\n" % (len(buf)))
@@ -825,9 +838,6 @@ class cli:
 
             return writer
 
-    def is_closed(fh):
-        fd = fh.fileno()
-        
 
     class Session():
         def __init__(self, run_fn, argv):
@@ -861,23 +871,16 @@ class cli:
 
             self.file_handles = file_handles
 
-            result_r, result_w = os.pipe()
-            console_r, console_w = os.pipe()
+            result_pipe = cli.Pipe()
+            console_pipe = cli.Pipe()
 
-            os.set_blocking(console_r, False)
-            os.set_blocking(console_w, False)
-
-            os.set_blocking(result_r, False)
-            os.set_blocking(result_w, False)
             pid = os.fork()
             if pid == 0:
-                os.dup2(console_w, sys.stdout.fileno())
-                os.dup2(console_w, sys.stderr.fileno())
+                console = console_pipe.byte_writer()
+                os.dup2(console.fileno(), sys.stdout.fileno())
+                os.dup2(console.fileno(), sys.stderr.fileno())
                 sys.stdin.close()
-                os.close(console_r)
-                os.close(result_r)
-                # ugh writefile breaks 
-                pipe = os.fdopen(result_w, 'wb')
+                writer = result_pipe.obj_writer()
                 try:
                     result = self.run_fn(**args)
                     sys.stderr.flush()
@@ -885,42 +888,17 @@ class cli:
                     if not isinstance(result, types.GeneratorType):
                         result = [result]
                     for r in result:
-                        # sys.stderr.buffer.write("writing: {}\n".format(r).encode('ascii'))
-                        # sys.stderr.buffer.flush()
-                        buf = codec.dump(r, bytearray())
-                        pipe.write(b"%d\n" % (len(buf)))
-                        pipe.write(buf)
-                        pipe.flush()
+                        writer(r)
                 finally:
-                    pipe.write(b'-1\n')
-                    pipe.close()
-                    sys.stdout.flush()
-                    sys.stderr.flush()
-                    os.close(sys.stdout.fileno())
-                    os.close(sys.stderr.fileno())
-                    os.close(console_w)
+                    writer(end=True)
+                    sys.stdout.close()
+                    sys.stderr.close()
+                    console.close()
                 sys.exit(0)
             else:
                 self.pid = pid
-                os.close(console_w)
-                os.close(result_w)
-                pipe = os.fdopen(result_r, 'rb')
-                self.console = os.fdopen(console_r, 'rb')
-
-                def reader():
-                    while not pipe.closed:
-                        line = pipe.readline().decode('ascii').strip()
-                        if not line:  # blank line means it's probably over
-                            yield
-                        else:
-                            size = int(line)
-                            buf = pipe.read(size)
-                            if size < 0: break
-                            obj, _ = codec.parse(buf, 0)
-                            # print('yield', obj, file=sys.stderr)
-                            yield obj
-
-                self.reader = reader()
+                self.console = console_pipe.byte_reader()
+                self.reader = result_pipe.obj_reader()
 
         def create_fh(self, value):
             if isinstance(value, wire.FileHandle):
@@ -945,7 +923,14 @@ class cli:
                 return wire.Session(self, value, {})
             except (GeneratorExit, StopIteration):
                 os.wait()
+                last = bytearray()
+                while out != b'':
+                    last.extend(out)
+                    out = self.console.read()
+
                 output_fhs = {}
+                if last:
+                    output_fhs['console'] = last
                 for name, fhs in self.file_handles.items():
                     output_fhs[name] = []
                     for fh in fhs:
