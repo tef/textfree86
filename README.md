@@ -16,14 +16,14 @@ local.host$ insert-into-database records.json --overwrite
 Unfortunately, the database isn't on our machine, so we must connect to another and run the program again. It's a little clumsier: Although we can access the database, we can't access `record.json` now. 
 
 ```
-$ scp record.json:user@remote.host . # copy the file over, before running it
-$ ssh user@remote.host insert-into-database record.json
+local.host$ scp record.json:user@remote.host . # copy the file over, before running it
+local.host$ ssh user@remote.host insert-into-database record.json
 ```
 
 Or sometimes, the problem is running a command inside a sandbox:
 
 ```
-$ container-exec --flag-i-forget-every-time run insert-into-database ... # uh wait what do I do here
+local.host$ container-exec --flag-i-forget-every-time run insert-into-database ... # uh wait what do I do here
 ```
 
 This is the problem that TextFree86 tries to solve: letting you run a command line tool, from anywhere, as if it were a local command line. What we'd like is some command that runs the remote code, but passes in files from our current machine:
