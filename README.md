@@ -2,118 +2,73 @@
 
 *This readme is not ready for an audience yet. I'd appreciate if you didn't link to it, thank you*
 
+TextFree86 is tool (& library) for running remote or sandboxed command-line programs. It's a little like using SSH, but a lot more powerful. To understand the difference between them, it's best to start with an example.
+
 ### Network transparent means more than just SSH
 
 Take an imaginary CLI tool, that inserts some JSON into a database:
 
 ```
-$ insert-into-database record.json
-$ insert-into-database records.json --overwrite
+local.host$ insert-into-database records.json # a file on local.host
+local.host$ insert-into-database records.json --overwrite
 ```
 
-Running it from a different machine is a little clumsy, but possible:
+Unfortunately, the database isn't on our machine, so we must connect to another and run the program again. It's a little clumsier: Although we can access the database, we can't access `record.json` now. 
 
 ```
-$ scp record.json:user@remote.host .
+$ scp record.json:user@remote.host . # copy the file over, before running it
 $ ssh user@remote.host insert-into-database record.json
 ```
 
-Similarly, running a command inside a container can be a little frustating
+Or sometimes, the problem is running a command inside a sandbox:
 
 ```
 $ container-exec --flag-i-forget-every-time run insert-into-database ... # uh wait what do I do here
 ```
 
-What you want is a command that parses the input on your machine, but does the work on another. Inevitably, you end up writing another command line program to achieve this.
+This is the problem that TextFree86 tries to solve: letting you run a command line tool, from anywhere, as if it were a local command line. What we'd like is some command that runs the remote code, but passes in files from our current machine:
 
 ```
-$ remote-insert-into-database record.json  # run a remote command with a local file
+local.host$ remote-insert-into-database record.json  # run a remote command with a local file
 ```
 
-TextFree86 is a framework that comes with a reusable program to do this for you. Write a local CLI tool, get a remote CLI tool for free.
+Admittedly, now we have two problems. We must maintain `remote-insert-into-database`, and when we add a new feature to `insert-into-database`, we have to update the `remote-` client too.
 
-### Writing a remote CLI is Effort, so don't do it.
-
-There are a couple of well worn strategies for writing a new remote command-line tool:
-
-- Hack the scripts. A new local script that pipes the file over SSH, and a new remote script to read from the pipe instead of a file. 
-- Tidy them up. Pull out the command and embed it into a web service. Expose an API, probably JSON, and write another command line tool. 
-
-TextFree86 does both of these for you.
-
-All TextFree86 programs can take input over a pipe, rather than as arguments, and comes with a `textfree86` tool to call it. 
+TextFree86 solves this problem too: You don't have to write `remote-insert-database`. You just need to tell `textfree86` how to run the command, and the rest is handled for you:
 
 ```
-local.host$ alias remote-insert-into-database='textfree86 "ssh database insert-into-database --pipe"'
+local.host$ alias remote-insert-into-database='textfree86 "ssh remote host insert-into-database --pipe"'
 local.host$ remote-insert-into-database record.json    # use a local file, but running a remote command
 ```
 
-A TextFree86 command also knows how to expose itself over HTTP*:
+How it works is very similar to how a human uses a command line program: it runs `--help` first, asking the program at the remote end to describe the options it takes, uses this to parse the command line, streams the files listed to the remote end, and waits for the output.
+
+... and the argument description is also enough to provide tab completion!
 
 ```
-remote.host$ insert-into-database --serve
-```
-
-... and the `textfree86` program takes URLs too*:
-
-```
-local.host$ alias remote-insert-into-database='textfree86 http://remote.host/insert-into-database'
-local.host$ remote-insert-into-database record.json
-```
-
-[Note: * Pipes work now, but HTTP support will come later]
-
-### But wait, there's more!
-
-A TextFree86 program can do more than *accept* input over a pipe, it can *describe* the input it accepts too.
-
-In other words, tab completion works out of the box!
-
-```
-local.host$ complete -o nospace -C remote-insert-into-database
+local.host$ complete -o nospace -C remote-insert-into-database remote-insert-into-database
 local.host$ remote-insert-into-database --over<TAB>
 --overwrite
 ```
 
-There are even use cases where TextFree86 exhibits a little more than just novelty and trickery: A TextFree86 program run inside a container can be run like a program outside of one, reading and writing file arguments, environment variables, or configuration files. 
+In the above example:
 
-The most useful feature of `textfree86` is that you don't need to update the `textfree86` program every time the remote command line changes. Instead of hardcoding how each program works, `textfree86` knows enough about command line parsing, and the remote command knows how to describe what input it needs.
+- the alias is resolved to `textfree86` and run
+- which in turn runs `ssh remote.host`
+- which starts `insert-into-database --pipe`, on the remote machine
+- `textfree86` asks it for the parsing description, and uses it to work out the possible completions
 
-That's what 'network transparent' means, but TextFree86 is more than just running a program over a network.
+The `textfree86` client doesn't know much about the command at the other end of the pipe, just that it should answer the three basic commands: return the help and option parsing data, spawn a command with the parsed arguments, and poll it to get output. 
 
-TextFree86 is about running remote or sandboxed programs, without having to use a different tool for each one.
+Really, 'Network transparent' is just a fancy way of saying 'client-server': the `textfree86` program is a generic front-end client, and the server is the command line program on the remote machine, speaking the same protocol. (For the curious, it's a type-length-value encoding, for the most part)
 
-## A real example program:
 
-```
-import subprocess
-from textfree86 import cli
 
-cmd = cli.Command('logdetails','write the uptime, uname, etc to a given file')
-@cmd.run('--uptime? --uname? output:outfile') # this describes how to parse cmd line args
-def cmd_run(uptime, uname, output): # uptime, uname are boolean, output is a filehandle
-    out = []
-    if uptime:
-        p= subprocess.run("uptime", stdout=subprocess.PIPE)
-        output.write(p.stdout)
-        out.append("uptime")
-    if uname:
-        p= subprocess.run("uname", stdout=subprocess.PIPE)
-        output.write(p.stdout)
-        out.append("uname")
-    if out:
-        return "Wrote {} to log".format(",".join(out))
-    else:
-        return "Wrote nothing to log, try --uname/--uptime"
-
-cmd.main(__name__) 
-```
-
-## How do I use the Library?
+## The `textfree86` Python Library
 
 Please note: Although TextFree86 implementation requires Python 3.6, the underlying protocol does not.
 
-### Another Example Program
+### An Example Program
 
 A textfree86 program consists of `cli.Commands()`, chained together, used to decorate functions to dispatch:
 
