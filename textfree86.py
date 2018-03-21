@@ -873,13 +873,16 @@ class cli:
 
             result_pipe = cli.Pipe()
             console_pipe = cli.Pipe()
+            stdin_pipe = cli.Pipe()
 
             pid = os.fork()
             if pid == 0:
                 console = console_pipe.byte_writer()
+                stdin = stdin_pipe.byte_reader()
+                os.set_blocking(stdin.fileno(), True)
+                os.dup2(stdin.fileno(), sys.stdin.fileno())
                 os.dup2(console.fileno(), sys.stdout.fileno())
                 os.dup2(console.fileno(), sys.stderr.fileno())
-                sys.stdin.close()
                 writer = result_pipe.obj_writer()
                 try:
                     result = self.run_fn(**args)
@@ -899,6 +902,7 @@ class cli:
                 self.pid = pid
                 self.console = console_pipe.byte_reader()
                 self.reader = result_pipe.obj_reader()
+                self.stdin = stdin_pipe.byte_writer()
 
         def create_fh(self, value):
             if isinstance(value, wire.FileHandle):
@@ -915,6 +919,14 @@ class cli:
             pass
 
         def poll(self, client_file_handles=()):
+            if self.stdin and 'stdin' in client_file_handles:
+                buf = client_file_handles['stdin']
+                if buf == b'':
+                    self.stdin.close()
+                    self.stdin = None
+                elif buf is not None:
+                    self.stdin.write(buf)
+                    self.stdin.flush()
             output_fhs = {}
             out = self.console.read()
             if out:
@@ -1160,6 +1172,8 @@ class cli:
                 else:
                     argv[name] = value
 
+        os.set_blocking(sys.stdin.fileno(), False)
+
         result =  root.call(action.path, argv)
 
         while isinstance(result, wire.Session):
@@ -1180,7 +1194,7 @@ class cli:
                 else:
                     print(r)
                 sys.stdout.flush()
-            result = root.poll(result.idx, file_handles=())
+            result = root.poll(result.idx, file_handles={'stdin': sys.stdin.buffer.read()})
             time.sleep(0.300) 
 
         if 'console' in result.file_handles and result.file_handles['console']:
